@@ -89,7 +89,7 @@ OKX 有两种持仓模式，反向的含义完全不同：
 
 ```bash
 # 1. 克隆
-git clone https://github.com/<your-name>/okx-reverse-order.git
+git clone https://github.com/tsnslj/okx-reverse-order.git
 cd okx-reverse-order
 
 # 2. 配置凭证
