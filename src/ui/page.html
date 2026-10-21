@@ -167,11 +167,32 @@
   ::-webkit-scrollbar-thumb{background:#242e3c;border-radius:6px;border:2px solid var(--bg)}
   ::-webkit-scrollbar-track{background:transparent}
 
+  /* 窄屏：侧栏不能藏起来，否则找不到「设置」入口，
+     改成顶部横排标签栏 */
   @media (max-width:880px){
-    .side{display:none}
+    .app{flex-direction:column}
+    .side{
+      width:auto;flex:none;height:auto;position:static;
+      flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap;
+      padding:10px 12px;border-right:0;border-bottom:1px solid var(--line);
+    }
+    .brand{padding:0;flex:0 0 auto}
+    .brand span{display:none}
+    nav{flex-direction:row;flex-wrap:wrap;gap:4px;margin-left:auto}
+    nav button{width:auto;padding:7px 12px;font-size:13px}
+    nav button.on::before,nav button::before{display:none}
+    .sidefoot{display:none}
     .page{padding:18px 16px 50px}
     .topbar{padding:14px 16px}
     .iprow,.row2{grid-template-columns:1fr}
+  }
+  @media (max-width:520px){
+    main{width:100%}
+    .brand b{font-size:13.5px}
+    nav button{padding:6px 10px;font-size:12.5px}
+    .topbar{flex-direction:column;align-items:stretch;gap:10px}
+    .topActions{display:flex;gap:8px}
+    .topActions .btn{flex:1}
   }
 </style>
 </head>
@@ -203,6 +224,7 @@
         </div>
       </div>
       <div class="topActions">
+        <button class="btn ghost" id="btnGoSettings">API 设置</button>
         <button class="btn primary" id="btnStart">启动反手</button>
         <button class="btn danger" id="btnStop" disabled>停止</button>
       </div>
@@ -387,6 +409,7 @@ function go(tab) {
   if (tab === 'logs') scrollLog(true);
 }
 document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => go(b.dataset.tab)));
+$('#btnGoSettings').addEventListener('click', () => go('settings'));
 
 /* ── 顶部状态 ── */
 function renderEngine(st) {
