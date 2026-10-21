@@ -137,6 +137,12 @@
   .form{display:grid;gap:16px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:7px}
+  /* 开关是 label，必须压住上面那条 .field label{display:block}，
+     否则 flex 被覆盖、滑轨宽度塌成 0，圆点会飘到文字上 */
+  .field label.switch{
+    display:flex;align-items:center;gap:11px;margin-bottom:0;
+    font-size:13px;color:var(--text);cursor:pointer;
+  }
   .field label em{font-style:normal;color:var(--dim);font-size:11.5px;margin-left:6px}
   .field input[type=text],.field input[type=password],.field input[type=number],.field select{
     width:100%;padding:10px 13px;border-radius:9px;border:1px solid var(--line);
@@ -158,6 +164,30 @@
   .msg.show{display:block}
   .msg.ok{background:rgba(61,220,151,.10);color:#6ee7b7;border:1px solid rgba(61,220,151,.28)}
   .msg.err{background:rgba(246,70,93,.10);color:#ff9aa8;border:1px solid rgba(246,70,93,.28)}
+  /* ── 自绘弹窗与提示：不用原生 confirm/alert，内置预览面板会把它吞掉 ── */
+  .modal{position:fixed;inset:0;z-index:200;background:rgba(4,7,11,.72);
+    display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)}
+  .modal[hidden]{display:none}
+  .modal-card{
+    width:100%;max-width:430px;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:22px 24px 18px;box-shadow:0 24px 60px rgba(0,0,0,.55);
+    animation:mIn .16s ease-out;
+  }
+  @keyframes mIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+  .modal-title{font-size:15.5px;font-weight:700;margin-bottom:10px}
+  .modal-body{color:var(--muted);font-size:13.5px;line-height:1.75}
+  .modal-body b{color:var(--text)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);
+    z-index:260;max-width:min(560px,90vw);padding:11px 18px;border-radius:10px;
+    font-size:13px;line-height:1.6;opacity:0;pointer-events:none;transition:.2s;
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    box-shadow:0 12px 34px rgba(0,0,0,.5);
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.ok{border-color:rgba(61,220,151,.4);background:#0f2419;color:#8df0c4}
+  .toast.err{border-color:rgba(246,70,93,.45);background:#2a1418;color:#ff9aa8}
   code.inline{font-family:var(--mono);background:#0c1219;padding:2px 6px;border-radius:5px;font-size:12px;color:#9db3c9}
 
   /* ── 日志 ── */
@@ -515,6 +545,19 @@
   </div>
 </div>
 
+<!-- ══════════ 自绘确认弹窗 ══════════ -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">取消</button>
+      <button class="btn danger" id="modalOk">确定</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -534,6 +577,54 @@ async function api(path, opts) {
   const t = await r.text();
   try { return JSON.parse(t); } catch { return { ok: false, error: t }; }
 }
+
+/* ── 提示：不用原生 alert/confirm ──
+   内置预览面板（以及部分浏览器设置）会把原生对话框静默拦掉，
+   表现就是「点了按钮什么都不发生」。所以全部自绘。 */
+let toastTimer = null;
+function toast(text, kind) {
+  const el = $('#toast');
+  el.textContent = text;
+  el.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast' + (kind ? ' ' + kind : ''); }, 4200);
+}
+
+let modalResolve = null;
+function ask(opts) {
+  const o = typeof opts === 'string' ? { title: opts } : opts || {};
+  return new Promise((resolve) => {
+    $('#modalTitle').textContent = o.title || '确认';
+    $('#modalBody').innerHTML = o.html || '';
+    $('#modalOk').textContent = o.okText || '确定';
+    $('#modalOk').className = 'btn ' + (o.danger === false ? 'primary' : 'danger');
+    $('#modalCancel').textContent = o.cancelText || '取消';
+    $('#modalCancel').style.display = o.cancel === false ? 'none' : '';
+    $('#modal').hidden = false;
+    modalResolve = resolve;
+  });
+}
+function closeModal(v) {
+  $('#modal').hidden = true;
+  const r = modalResolve;
+  modalResolve = null;
+  if (r) r(v);
+}
+$('#modalOk').addEventListener('click', () => closeModal(true));
+$('#modalCancel').addEventListener('click', () => closeModal(false));
+$('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(false); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#modal').hidden) closeModal(false);
+});
+
+/* 兜底：任何未捕获的异步错误都要看得见，绝不允许「点了没反应」 */
+window.addEventListener('unhandledrejection', (e) => {
+  const m = e.reason && (e.reason.message || e.reason);
+  toast('操作失败：' + (m || '未知错误'), 'err');
+});
+window.addEventListener('error', (e) => {
+  if (e && e.message) toast('页面出错：' + e.message, 'err');
+});
 
 /* ── 标签切换 ── */
 function go(tab) {
@@ -841,48 +932,82 @@ function applyConfig(c) {
 
 /* ── 启停 ── */
 $('#btnStart').addEventListener('click', async () => {
+  if (S.starting) return;
+
   const inst = $('#fInst').value.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
   S.interval = Number($('#fInterval').value) || 1500;
   S.live = $('#fLive').checked;
 
   if (S.live) {
-    const ok = confirm(
-      '即将以【实盘】模式启动。\n\n' +
-      '启动后，你在 OKX 上的任何一笔增仓单都会在几秒内被真实反手（平仓单放行）。\n' +
-      '这项操作会真实改变持仓，产生手续费。\n\n确定启动？'
-    );
+    const ok = await ask({
+      title: '以实盘模式启动？',
+      html:
+        '启动后，你在 OKX 上的任何一笔<b>增仓单</b>都会在几秒内被真实反手（平仓单放行）。<br><br>' +
+        '这项操作会真实改变持仓并产生手续费。<br>工具会一直运行，直到你点「停止」或关掉本窗口。',
+      okText: '以实盘启动',
+      danger: true,
+    });
     if (!ok) return;
   }
 
-  // 只有「强制走代理」模式下，代理没开才需要拦
-  const px = await api('/api/proxy');
-  renderProxyState(px);
-  if (S.config.networkMode === 'proxy' && px.configured && !px.alive) {
-    go('overview');
-    showNetIssue({
-      kind: 'proxy-down',
-      hint: `网络模式被设成「只用代理」，但 ${px.host}:${px.port} 没有监听。把代理打开，或者去设置里把模式改回「自动」。`,
-    });
-    return;
-  }
+  const btn = $('#btnStart');
+  S.starting = true;
+  btn.disabled = true;
+  btn.textContent = '启动中…';
 
-  const r = await api('/api/engine/start', {
-    method: 'POST',
-    body: JSON.stringify({ live: S.live, interval: S.interval, instIds: inst.length ? inst : null }),
-  });
-  if (!r.ok) {
-    // 缺凭证时直接把人带到设置页
-    if (/凭证|缺少|缺 /.test(r.error || '')) { go('settings'); }
-    return alert(r.error || '启动失败');
+  try {
+    // 只有「强制走代理」模式下，代理没开才需要拦
+    const px = await api('/api/proxy');
+    renderProxyState(px);
+    if (S.config.networkMode === 'proxy' && px.configured && !px.alive) {
+      go('overview');
+      showNetIssue({
+        kind: 'proxy-down',
+        hint: `网络模式被设成「只用代理」，但 ${px.host}:${px.port} 没有监听。把代理打开，或者去设置里把模式改回「自动」。`,
+      });
+      return;
+    }
+
+    const r = await api('/api/engine/start', {
+      method: 'POST',
+      body: JSON.stringify({ live: S.live, interval: S.interval, instIds: inst.length ? inst : null }),
+    });
+
+    if (!r || !r.ok) {
+      const err = (r && r.error) || '启动失败（服务没有返回原因）';
+      // 缺凭证时直接把人带到设置页
+      if (/凭证|缺少|缺 /.test(err)) {
+        toast('还没填 API 凭证，已跳到设置页', 'err');
+        go('settings');
+      } else {
+        toast(err, 'err');
+        go('logs');
+      }
+      return;
+    }
+
+    renderEngine({ running: true, pid: r.pid, startedAt: Date.now(), uptimeSec: 0, args: { live: S.live } });
+    toast(S.live ? '反手引擎已启动（实盘）' : '反手引擎已启动（演练）', 'ok');
+    go('logs');
+  } catch (e) {
+    toast('启动请求失败：' + ((e && e.message) || e), 'err');
+  } finally {
+    S.starting = false;
+    renderEngine();   // 按真实状态复原按钮文字与可用性
   }
-  renderEngine({ running: true, pid: r.pid, startedAt: Date.now(), uptimeSec: 0, args: { live: S.live } });
-  go('logs');
 });
 
 $('#btnStop').addEventListener('click', async () => {
-  if (!confirm('停止反手引擎？停止后你下的单不会再被处理。')) return;
+  const ok = await ask({
+    title: '停止反手引擎？',
+    html: '停止后你下的单不会再被处理，已有持仓也不会被自动处理。',
+    okText: '停止',
+    danger: true,
+  });
+  if (!ok) return;
   const r = await api('/api/engine/stop', { method: 'POST' });
-  if (!r.ok) alert(r.error || '停止失败');
+  if (!r || !r.ok) toast((r && r.error) || '停止失败', 'err');
+  else toast('已停止', 'ok');
 });
 
 $('#fLive').addEventListener('change', (e) => {
@@ -1143,8 +1268,14 @@ $('#wzPrev').addEventListener('click', () => {
   if (WZ.busy) return;
   if (WZ.step > 1) { WZ.step -= 1; WZ.result = null; wzRender(); }
 });
-$('#wzClose').addEventListener('click', () => {
-  if (!confirm('跳过向导？之后可以在「设置」里手动填写 API。')) return;
+$('#wzClose').addEventListener('click', async () => {
+  const ok = await ask({
+    title: '跳过配置向导？',
+    html: '之后可以在「设置」里手动填写 API Key、Secret、Passphrase。',
+    okText: '跳过',
+    danger: false,
+  });
+  if (!ok) return;
   $('#wz').hidden = true;
   go('settings');
 });
