@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>反向开单器 · OKX 智能反手引擎</title>
-<meta name="description" content="基于 OKX V5 OpenAPI 的常开反手引擎：监听账户全部 U 本位永续订单，检测到增仓单自动平掉并反向开仓，平仓单自动放行。">
+<title>反向开单器 · 开仓总是反向？让机器替你翻过来</title>
+<meta name="description" content="写给那些一开多就跌、一开空就涨的人。基于 OKX V5 OpenAPI 的常开反手引擎：监听账户全部 U 本位永续订单，检测到增仓单自动平掉并反向开仓，平仓单自动放行。">
 <style>
   :root{
     --bg:#07080a;
@@ -263,10 +263,10 @@
         <span>反向开单器</span>
       </div>
       <div class="nav-links">
+        <a href="#who">写给谁</a>
         <a href="#how">工作原理</a>
         <a href="#feature">核心能力</a>
         <a href="#safety">安全机制</a>
-        <a href="#start">快速开始</a>
         <a class="btn btn-primary" href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
       </div>
     </nav>
@@ -278,15 +278,15 @@
   <!-- HERO -->
   <div class="hero">
     <div class="badge"><span class="dot"></span>OKX V5 OpenAPI · AI Builder Program</div>
-    <h1>一单入场，<span class="hl">机器负责反手</span></h1>
+    <h1>一开多就跌，一开空就涨？<br><span class="hl">让机器替你立刻翻过来</span></h1>
     <p class="lead">
-      常开运行的自动反手引擎。监听账户内全部 U 本位永续订单，
-      检测到<b>增仓单</b>立即平掉并反向开仓；检测到<b>平仓单</b>自动放行，
-      不会把你锁死在仓位里。
+      你不是每次都判断错了方向，你只是每次都慢了 5 秒。<br>
+      反向开单器常驻监听你的 OKX 账户，检测到<b>增仓单</b>的瞬间自动平掉并反向开仓——
+      把「我又开反了」变成「仓位已经反过来了」。平仓单自动放行，不会把你锁死在仓位里。
     </p>
     <div class="cta">
       <a class="btn btn-primary" href="#start">立即部署</a>
-      <a class="btn btn-ghost" href="#how">看它怎么工作</a>
+      <a class="btn btn-ghost" href="#who">写给谁</a>
     </div>
 
     <div class="terminal">
@@ -314,6 +314,49 @@
       <div class="stat"><div class="k">全部</div><div class="v">U 本位永续合约</div></div>
     </div>
   </div>
+
+  <!-- 写给谁 -->
+  <section id="who">
+    <div class="sec-head">
+      <div class="sec-tag">Who it's for</div>
+      <h2>如果你属于这三种人，这个工具就是为你写的</h2>
+      <p class="sec-sub">
+        它不负责让判断变准，只负责让「判断错了」这件事的代价变小。
+      </p>
+    </div>
+    <div class="grid-3">
+      <div class="feat">
+        <div class="ico">A</div>
+        <h4>手感相反型</h4>
+        <p>
+          看多的时候它就跌，看空的时候它就涨。方向其实没判断错，只是进场的时点总跟行情错开一步。
+          工具不跟你讨论行情，你进场，它就把仓位翻到另一边。
+        </p>
+      </div>
+      <div class="feat">
+        <div class="ico">B</div>
+        <h4>反应慢半拍型</h4>
+        <p>
+          发现自己做反了，切页面、找撤单、填数量、确认下单——四步走完，行情已经跑出几十个点。
+          这四步交给程序，你只需要在 App 里点那一下。
+        </p>
+      </div>
+      <div class="feat">
+        <div class="ico">C</div>
+        <h4>高频试错型</h4>
+        <p>
+          一天要反手七八次，每次手动操作都在付滑点和手续费。机器执行的一致性，
+          比你第十次操作时的手速可靠。
+        </p>
+      </div>
+    </div>
+
+    <div class="notice" style="margin-top:26px;border-color:rgba(212,255,63,.22);background:rgba(212,255,63,.04);color:#b9c4a8">
+      <strong style="color:var(--accent)">它不做什么</strong>
+      不预测行情、不判断方向、不替你做决策、不看 K 线。它只在你说「我下了一单」之后，
+      把这单反着再做一遍。判断永远是你的，执行交给机器。
+    </div>
+  </section>
 
   <!-- 问题 -->
   <section>
