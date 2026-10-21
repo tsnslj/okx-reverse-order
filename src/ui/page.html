@@ -89,6 +89,12 @@
   .banner b{display:block;margin-bottom:3px}
   .banner p{margin:0;color:#c9b48c;font-size:13px}
   .banner .btn{margin-left:auto;flex-shrink:0;align-self:center}
+  .banner.warn{
+    background:linear-gradient(90deg,rgba(246,70,93,.12),rgba(246,70,93,.03));
+    border-color:rgba(246,70,93,.32);
+  }
+  .banner.warn .bi{color:#ff8b9a;font-weight:700}
+  .banner.warn p{color:#e0b4bb}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:22px}
   .kpi{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
@@ -241,6 +247,15 @@
         <button class="btn sm" onclick="go('settings')">去设置</button>
       </div>
 
+      <div class="banner warn" id="netBanner" style="display:none">
+        <div class="bi">!</div>
+        <div>
+          <b id="netTitle">连不上 OKX</b>
+          <p id="netHint">—</p>
+        </div>
+        <button class="btn sm" onclick="redetectNet(this)">重新检测</button>
+      </div>
+
       <div class="grid">
         <div class="kpi">
           <div class="k">持仓模式</div>
@@ -326,7 +341,7 @@
           <div class="field">
             <label>代理地址 <em>大陆网络必填</em></label>
             <input type="text" id="fProxy" placeholder="http://127.0.0.1:7897" spellcheck="false" />
-            <div class="hint">Clash Verge 默认 7897，Clash for Windows 常见 7890。填错会连不上 OKX。</div>
+            <div class="hint" id="proxyState">Clash Verge 默认 7897，Clash for Windows 常见 7890。填错会连不上 OKX。</div>
           </div>
         </div>
       </div>
@@ -407,6 +422,7 @@ function go(tab) {
   ['overview', 'settings', 'logs'].forEach((t) => { $('#tab-' + t).hidden = t !== tab; });
   if (tab === 'overview') refreshAccount();
   if (tab === 'logs') scrollLog(true);
+  if (tab === 'settings') api('/api/proxy').then(renderProxyState).catch(() => {});
 }
 document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => go(b.dataset.tab)));
 $('#btnGoSettings').addEventListener('click', () => go('settings'));
@@ -478,6 +494,43 @@ function pnlClass(v) {
   return x > 0 ? 'up' : 'down'; // 中文习惯：红涨绿跌
 }
 
+/* ── 网络故障提示 ── */
+function showNetIssue(a) {
+  const b = $('#netBanner');
+  const titles = {
+    'proxy-down': '代理没开，工具连不上 OKX',
+    whitelist: 'IP 不在白名单',
+    dns: 'OKX 域名解析失败',
+    'env-mismatch': 'Key 与环境不匹配',
+    sign: '签名校验失败',
+    timeout: '请求超时',
+  };
+  $('#netTitle').textContent = titles[a.kind] || '连不上 OKX';
+  $('#netHint').textContent = a.hint || a.error || '未知错误';
+  b.style.display = 'flex';
+}
+
+function renderProxyState(px) {
+  const el = $('#proxyState');
+  if (!el) return;
+  if (!px || !px.configured) {
+    el.innerHTML = 'Clash Verge 默认 7897，Clash for Windows 常见 7890。填错会连不上 OKX。';
+    return;
+  }
+  el.innerHTML = px.alive
+    ? `<span style="color:var(--accent)">● 端口 ${px.port} 已连通</span>`
+    : `<span style="color:var(--up)">● 端口 ${px.port} 没有监听 —— Clash 是不是没开？</span>`;
+}
+
+async function redetectNet(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '检测中…'; }
+  const px = await api('/api/proxy');
+  renderProxyState(px);
+  await refreshAccount();
+  await refreshIp();
+  if (btn) { btn.disabled = false; btn.textContent = '重新检测'; }
+}
+
 async function refreshAccount() {
   const a = await api('/api/account');
   if (!a.configured) {
@@ -487,17 +540,21 @@ async function refreshAccount() {
     $('#posWrap').innerHTML = '<div class="empty">还没有配置 API 凭证</div>';
     $('#pendWrap').innerHTML = '<div class="empty">—</div>';
     $('#setupBanner').style.display = 'flex';
+    $('#netBanner').style.display = 'none';
     return;
   }
   $('#setupBanner').style.display = 'none';
 
   if (a.ok === false) {
     $('#kMode').textContent = '连接失败';
-    $('#kModeSub').textContent = a.error.slice(0, 40);
-    $('#posWrap').innerHTML = `<div class="empty">${escapeHtml(a.error)}</div>`;
+    $('#kModeSub').textContent = a.kind === 'proxy-down' ? '代理没开' : '看下方提示';
+    $('#kEq').textContent = '—'; $('#kAvail').textContent = '—'; $('#kToday').textContent = '—';
+    $('#posWrap').innerHTML = '<div class="empty">连不上账户，先解决下方的连接问题</div>';
     $('#pendWrap').innerHTML = '<div class="empty">—</div>';
+    showNetIssue(a);
     return;
   }
+  $('#netBanner').style.display = 'none';
 
   const netMode = a.posMode === 'net_mode';
   $('#kMode').textContent = netMode ? '买卖模式' : '开平仓模式';
@@ -626,7 +683,10 @@ $('#btnTest').addEventListener('click', async () => {
   if (r.ok) {
     flash('ok', `连接成功 · UID ${r.uid} · ${r.acctLv === '2' ? '合约模式' : '模式 ' + r.acctLv} · ${r.ms}ms`);
   } else {
-    flash('err', r.error || '连接失败');
+    flash('err', r.hint || r.error || '连接失败');
+    if (r.proxy) renderProxyState(r.proxy);
+    showNetIssue(r);
+    go('overview');
   }
 });
 
@@ -654,6 +714,18 @@ $('#btnStart').addEventListener('click', async () => {
       '这项操作会真实改变持仓，产生手续费。\n\n确定启动？'
     );
     if (!ok) return;
+  }
+
+  // 代理没开就启动，等于启动了个什么都做不了的进程 —— 先拦住
+  const px = await api('/api/proxy');
+  renderProxyState(px);
+  if (px.configured && !px.alive) {
+    go('overview');
+    showNetIssue({
+      kind: 'proxy-down',
+      hint: `代理 ${px.host}:${px.port} 没有监听，Clash 没开。启动后引擎连不上 OKX，不会反手任何单。请先打开 Clash，再点「重新检测」。`,
+    });
+    return;
   }
 
   const r = await api('/api/engine/start', {
@@ -705,6 +777,7 @@ function escapeHtml(s) {
   const b = await api('/api/bootstrap');
   applyConfig(b.config);
   renderEngine(b.engine);
+  renderProxyState(b.proxy);
   (b.logs || []).forEach(addLog);
   if (b.config.missing && b.config.missing.length) go('settings');
   else refreshAccount();

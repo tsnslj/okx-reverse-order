@@ -111,9 +111,14 @@ function createTunnel(targetHost, targetPort) {
     };
 
     socket.on('data', onData);
-    socket.once('error', (e) =>
-      reject(new Error(`代理连接失败 ${proxyCfg.host}:${proxyCfg.port} — ${e.message}`))
-    );
+    socket.once('error', (e) => {
+      // ECONNREFUSED 几乎总是「代理软件没开」，这是用户自己就能修的事，
+      // 日志里要直说，别丢一个英文 errno 让人猜
+      const friendly = /ECONNREFUSED/.test(e.message)
+        ? `代理未启动（${proxyCfg.host}:${proxyCfg.port} 无监听，Clash 是不是没开？）`
+        : `代理连接失败 ${proxyCfg.host}:${proxyCfg.port} — ${e.message}`;
+      reject(new Error(friendly));
+    });
     socket.once('timeout', () =>
       socket.destroy(new Error('代理连接超时（20s）'))
     );

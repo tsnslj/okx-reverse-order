@@ -16,10 +16,11 @@ process.env.OKX_ALLOW_EMPTY = '1';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const { spawn } = require('child_process');
 
 const env = require('../env');
-const { resetPool } = require('../okx/client');
+const { resetPool, currentProxy } = require('../okx/client');
 const { getConfig, getPositions, getBalance } = require('../okx/account');
 const { getOrdersPending } = require('../okx/trade');
 const { detectBoth } = require('../net/ipcheck');
@@ -111,6 +112,81 @@ function readBody(req) {
   });
 }
 
+// ─────────────────────── 诊断：代理状态 + 报错翻译 ───────────────────────
+
+/** 探测本机代理端口是否真的在监听（Clash 关了这是最常见的故障） */
+function checkProxy() {
+  const px = currentProxy();
+  if (!px) return Promise.resolve({ configured: false, alive: false, host: '', port: 0 });
+  return new Promise((resolve) => {
+    const s = net.connect({ host: px.host, port: px.port });
+    let done = false;
+    const finish = (alive) => {
+      if (done) return;
+      done = true;
+      try { s.destroy(); } catch {}
+      resolve({ configured: true, alive, host: px.host, port: px.port });
+    };
+    s.setTimeout(1500);
+    s.once('connect', () => finish(true));
+    s.once('timeout', () => finish(false));
+    s.once('error', () => finish(false));
+  });
+}
+
+/**
+ * 把技术报错翻译成「用户下一步该做什么」。
+ * 图形界面里直接抛 ECONNREFUSED 等于什么都没说。
+ */
+function explainError(msg, proxyState) {
+  const m = String(msg || '');
+
+  if (/ECONNREFUSED/i.test(m)) {
+    if (proxyState && proxyState.configured) {
+      return {
+        kind: 'proxy-down',
+        hint: `代理没开：${proxyState.host}:${proxyState.port} 拒绝连接。先把 Clash 打开（确认端口是这个），然后点「重新检测」。`,
+      };
+    }
+    return { kind: 'net', hint: '连接被拒绝，目标端口不通。检查代理地址是否填错。' };
+  }
+
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(m)) {
+    return {
+      kind: 'dns',
+      hint: 'OKX 域名解析失败（国内网络会被污染）。必须配置代理，地址形如 http://127.0.0.1:7897。',
+    };
+  }
+
+  const ipHit = m.match(/Your IP\s+(\d{1,3}(?:\.\d{1,3}){3})[^]*?whitelist/i);
+  if (/50110/.test(m) || ipHit) {
+    return {
+      kind: 'whitelist',
+      ip: ipHit ? ipHit[1] : '',
+      hint: ipHit
+        ? `IP 不在白名单：OKX 看到你的出口 IP 是 ${ipHit[1]}。去 OKX → 账户 → API 编辑这把 Key，把该 IP 加进去。`
+        : 'IP 不在白名单：去 OKX → 账户 → API 编辑这把 Key，把当前出口 IP 加进去。',
+    };
+  }
+
+  if (/50101/.test(m)) {
+    return {
+      kind: 'env-mismatch',
+      hint: '这把 Key 和当前环境不匹配：模拟盘专用 Key 不能用于实盘，实盘 Key 也不能用于模拟盘。',
+    };
+  }
+
+  if (/50113/.test(m) || /Invalid Sign/i.test(m)) {
+    return { kind: 'sign', hint: '签名校验失败：Secret Key 或 Passphrase 填错了，检查后重新保存。' };
+  }
+
+  if (/请求超时|timeout|ETIMEDOUT|socket hang up/i.test(m)) {
+    return { kind: 'timeout', hint: '请求超时：代理节点可能不通，换一个节点或稍后重试。' };
+  }
+
+  return { kind: 'unknown', hint: '' };
+}
+
 // ─────────────────────────── 路由 ───────────────────────────
 
 async function handle(req, res) {
@@ -132,8 +208,14 @@ async function handle(req, res) {
       engine: engine.status(),
       todayCount: guard.getTodayCount(),
       node: process.version,
+      proxy: await checkProxy(),
       logs: engine.ring.slice(-200),
     });
+  }
+
+  // ---- 代理连通性（单独探测，供「重新检测」按钮用）----
+  if (req.method === 'GET' && p === '/api/proxy') {
+    return json(res, 200, await checkProxy());
   }
 
   // ---- 保存配置 ----
@@ -197,7 +279,17 @@ async function handle(req, res) {
         ms: Date.now() - t0,
       });
     } catch (e) {
-      return json(res, 200, { ok: false, error: e.message, ms: Date.now() - t0 });
+      const px = await checkProxy();
+      const ex = explainError(e.message, px);
+      return json(res, 200, {
+        ok: false,
+        error: e.message,
+        kind: ex.kind,
+        hint: ex.hint,
+        ip: ex.ip || '',
+        proxy: px,
+        ms: Date.now() - t0,
+      });
     }
   }
 
@@ -248,7 +340,17 @@ async function handle(req, res) {
         todayCount: guard.getTodayCount(),
       });
     } catch (e) {
-      return json(res, 200, { configured: true, ok: false, error: e.message });
+      const px = await checkProxy();
+      const ex = explainError(e.message, px);
+      return json(res, 200, {
+        configured: true,
+        ok: false,
+        error: e.message,
+        kind: ex.kind,
+        hint: ex.hint,
+        ip: ex.ip || '',
+        proxy: px,
+      });
     }
   }
 

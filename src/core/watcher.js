@@ -206,6 +206,32 @@ class OrderWatcher {
     process.exit(2);
   }
 
+  /** 代理没开：这是用户一秒钟就能修好的事，不该重试 45 秒然后含糊其辞 */
+  dieProxy(err) {
+    this.running = false;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+
+    console.log('');
+    console.log('════════════════════════════════════════════════════════');
+    console.log('  ✗ 已停止运行：代理没开，连不上 OKX');
+    console.log('════════════════════════════════════════════════════════');
+    console.log(`  ${err.message}`);
+    console.log('');
+    console.log('  OKX 在国内必须走代理（域名被污染，直连解析到假地址）。');
+    console.log('');
+    console.log('  怎么修：');
+    console.log('    1. 打开 Clash Verge（确认端口是 7897，别只开系统托盘图标）');
+    console.log('    2. 回到控制台点「重新检测」，显示端口已连通后再启动反手');
+    console.log('');
+    console.log('  在你修好之前，工具不会反手任何订单。');
+    console.log('════════════════════════════════════════════════════════');
+    console.log('');
+
+    this.emit('fatal', { code: 'PROXY_DOWN', error: err.message });
+    process.exit(4);
+  }
+
   async start() {
     if (this.running) return;
     this.running = true;
@@ -222,6 +248,7 @@ class OrderWatcher {
       } catch (e) {
         const code = fatalCode(e);
         if (code) return this.die(e, code);
+        if (/代理未启动|ECONNREFUSED/i.test(e.message)) return this.dieProxy(e);
         if (attempt === 6) {
           this.running = false;
           console.log('');
@@ -262,6 +289,9 @@ class OrderWatcher {
         // 凭证类问题：立刻停机，不要刷屏
         const code = fatalCode(e);
         if (code) return this.die(e, code);
+
+        // 代理进程被关掉：不会自己好，停机让人去开 Clash，别在这里空转
+        if (/代理未启动|ECONNREFUSED/i.test(e.message)) return this.dieProxy(e);
 
         // 网络类问题：指数退避，且只在关键节点打印，避免一个小时刷 7 万字
         this.failStreak += 1;
