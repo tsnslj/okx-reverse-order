@@ -1,0 +1,16 @@
+# 密钥，绝不提交
+.env
+.env.local
+.env.*.local
+
+# 依赖
+node_modules/
+
+# 运行时产物
+logs/
+data/*.json
+*.log
+
+# 系统
+.DS_Store
+Thumbs.db

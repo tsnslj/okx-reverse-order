@@ -1,0 +1,16 @@
+{
+  "name": "okx-reverse-order",
+  "version": "0.1.0",
+  "description": "OKX 智能反手引擎 - 监听账户订单，增仓单自动平仓并反向开仓，平仓单自动放行",
+  "keywords": ["okx", "trading", "reverse-order", "perpetual-swap", "ai-builder"],
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "check": "node scripts/p0-check.js",
+    "dry": "node src/start.js",
+    "live": "node src/start.js --live"
+  }
+}

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>反向开单器 · OKX 智能反手引擎</title>
+<meta name="description" content="基于 OKX V5 OpenAPI 的常开反手引擎：监听账户全部 U 本位永续订单，检测到增仓单自动平掉并反向开仓，平仓单自动放行。">
+<style>
+  :root{
+    --bg:#07080a;
+    --panel:#0e1116;
+    --panel-2:#12161d;
+    --line:#1d242e;
+    --text:#e9eef4;
+    --muted:#8a95a5;
+    --dim:#5f6a79;
+    --accent:#d4ff3f;
+    --accent-soft:rgba(212,255,63,.12);
+    --green:#3ddc97;
+    --red:#ff5c5c;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:"";
+    position:fixed;inset:0;
+    background:
+      radial-gradient(900px 500px at 15% -10%,rgba(212,255,63,.09),transparent 60%),
+      radial-gradient(700px 400px at 90% 5%,rgba(69,224,176,.06),transparent 55%);
+    pointer-events:none;z-index:0;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+
+  /* ── 导航 ── */
+  header{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:blur(14px);
+    background:rgba(7,8,10,.78);
+    border-bottom:1px solid var(--line);
+  }
+  nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px}
+  .logo-mark{
+    width:26px;height:26px;border-radius:7px;
+    background:linear-gradient(135deg,var(--accent),#8fe03a);
+    display:grid;place-items:center;color:#0a0c10;font-size:14px;font-weight:800;
+  }
+  .nav-links{display:flex;gap:26px;align-items:center}
+  .nav-links a{color:var(--muted);text-decoration:none;font-size:14px;transition:color .2s}
+  .nav-links a:hover{color:var(--text)}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:9px 18px;border-radius:9px;font-size:14px;font-weight:600;
+    text-decoration:none;transition:all .2s;border:1px solid transparent;
+  }
+  .btn-primary{background:var(--accent);color:#0a0c10}
+  .btn-primary:hover{background:#e2ff6b;transform:translateY(-1px)}
+  .btn-ghost{border-color:var(--line);color:var(--text);background:var(--panel)}
+  .btn-ghost:hover{border-color:#33404f;background:var(--panel-2)}
+
+  /* ── Hero ── */
+  .hero{padding:88px 0 64px;text-align:center}
+  .badge{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:6px 14px;border-radius:999px;
+    border:1px solid rgba(212,255,63,.28);
+    background:var(--accent-soft);
+    color:var(--accent);font-size:12.5px;font-weight:600;
+    letter-spacing:.3px;margin-bottom:26px;
+  }
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  h1{
+    font-size:clamp(34px,5.4vw,58px);
+    line-height:1.18;letter-spacing:-1.2px;font-weight:800;
+    margin-bottom:22px;
+  }
+  h1 .hl{
+    background:linear-gradient(100deg,var(--accent) 10%,var(--green) 90%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .lead{
+    font-size:17px;color:var(--muted);max-width:660px;margin:0 auto 34px;
+  }
+  .lead b{color:var(--text);font-weight:600}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:56px}
+
+  /* ── 终端 ── */
+  .terminal{
+    text-align:left;border:1px solid var(--line);border-radius:14px;
+    background:linear-gradient(180deg,#0c1016,#090b0f);
+    overflow:hidden;box-shadow:0 30px 80px -30px rgba(0,0,0,.9);
+  }
+  .term-bar{
+    display:flex;align-items:center;gap:8px;
+    padding:11px 16px;border-bottom:1px solid var(--line);
+    background:rgba(255,255,255,.015);
+  }
+  .term-bar i{width:10px;height:10px;border-radius:50%;background:#2a323d;display:block}
+  .term-title{margin-left:8px;font-size:12px;color:var(--dim);font-family:var(--mono)}
+  .term-body{
+    padding:20px 22px;font-family:var(--mono);font-size:13px;line-height:2;
+    overflow-x:auto;
+  }
+  .term-body .ts{color:var(--dim)}
+  .term-body .hit{color:var(--accent)}
+  .term-body .act{color:#7fb2ff}
+  .term-body .ok{color:var(--green)}
+  .term-body .skip{color:var(--dim)}
+  .term-body .dimline{color:#5a6472}
+
+  /* ── 数据条 ── */
+  .stats{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    margin:56px 0 0;background:var(--panel);
+  }
+  .stat{padding:24px 20px;border-right:1px solid var(--line)}
+  .stat:last-child{border-right:none}
+  .stat .k{font-size:22px;font-weight:750;letter-spacing:-.4px}
+  .stat .v{font-size:12.5px;color:var(--dim);margin-top:4px}
+
+  /* ── 通用 section ── */
+  section{padding:84px 0}
+  .sec-head{max-width:640px;margin-bottom:44px}
+  .sec-tag{
+    font-size:12.5px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;
+    color:var(--accent);margin-bottom:14px;
+  }
+  h2{font-size:clamp(25px,3.2vw,34px);letter-spacing:-.7px;line-height:1.3;font-weight:750}
+  .sec-sub{color:var(--muted);font-size:15.5px;margin-top:14px}
+
+  /* ── 对比 ── */
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:26px;
+  }
+  .card.bad{border-color:rgba(255,92,92,.18)}
+  .card.good{border-color:rgba(212,255,63,.25);background:linear-gradient(180deg,rgba(212,255,63,.045),var(--panel) 60%)}
+  .card h3{font-size:15px;margin-bottom:18px;font-weight:700}
+  .card.bad h3{color:#ff8a8a}
+  .card.good h3{color:var(--accent)}
+  .steps{list-style:none;counter-reset:s}
+  .steps li{
+    counter-increment:s;position:relative;padding-left:34px;
+    margin-bottom:13px;color:var(--muted);font-size:14.5px;
+  }
+  .steps li::before{
+    content:counter(s);position:absolute;left:0;top:1px;
+    width:21px;height:21px;border-radius:6px;
+    display:grid;place-items:center;font-size:11.5px;font-weight:700;
+    background:#1a212a;color:var(--dim);font-family:var(--mono);
+  }
+  .card.good .steps li::before{background:var(--accent-soft);color:var(--accent)}
+  .card.good .steps li{color:var(--text)}
+
+  /* ── 流程 ── */
+  .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:stretch}
+  .flow-item{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:22px 18px;position:relative;
+  }
+  .flow-item:not(:last-child)::after{
+    content:"→";position:absolute;right:-13px;top:50%;transform:translateY(-50%);
+    color:var(--dim);font-size:15px;z-index:2;
+  }
+  .flow-item .n{
+    font-family:var(--mono);font-size:11px;color:var(--accent);
+    letter-spacing:1px;margin-bottom:10px;
+  }
+  .flow-item h4{font-size:14.5px;margin-bottom:7px;font-weight:700}
+  .flow-item p{font-size:13px;color:var(--dim);line-height:1.65}
+
+  /* ── 特性 ── */
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .feat{
+    background:var(--panel);border:1px solid var(--line);border-radius:13px;
+    padding:24px;transition:border-color .25s,transform .25s;
+  }
+  .feat:hover{border-color:#2c3846;transform:translateY(-2px)}
+  .feat .ico{
+    width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+    background:var(--accent-soft);color:var(--accent);
+    font-family:var(--mono);font-size:14px;font-weight:700;margin-bottom:16px;
+  }
+  .feat h4{font-size:15px;margin-bottom:8px;font-weight:700}
+  .feat p{font-size:13.5px;color:var(--muted);line-height:1.7}
+
+  /* ── 安全 ── */
+  .safety{display:grid;gap:12px}
+  .safety-row{
+    display:flex;gap:16px;align-items:flex-start;
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:20px 22px;
+  }
+  .safety-row .tag{
+    flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:700;
+    padding:4px 9px;border-radius:6px;background:#1a212a;color:var(--dim);
+    margin-top:2px;white-space:nowrap;
+  }
+  .safety-row h4{font-size:14.5px;margin-bottom:5px;font-weight:700}
+  .safety-row p{font-size:13.5px;color:var(--muted)}
+
+  /* ── 代码 ── */
+  pre{
+    background:#080a0e;border:1px solid var(--line);border-radius:12px;
+    padding:20px 22px;overflow-x:auto;
+    font-family:var(--mono);font-size:13px;line-height:1.95;color:#c3ccd8;
+  }
+  pre .c{color:#55606e}
+  pre .k{color:var(--accent)}
+  pre .s{color:#9ad4a0}
+
+  .tbl{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+  .tbl th,.tbl td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .tbl th{color:var(--dim);font-weight:600;font-size:12.5px;letter-spacing:.4px}
+  .tbl td{color:var(--muted)}
+  .tbl td:first-child{color:var(--text);font-family:var(--mono);font-size:13px}
+  .tbl tr:last-child td{border-bottom:none}
+
+  /* ── 声明 ── */
+  .notice{
+    border:1px solid rgba(255,92,92,.2);background:rgba(255,92,92,.045);
+    border-radius:12px;padding:22px 24px;font-size:13.5px;color:#c2b0b0;
+  }
+  .notice strong{color:#ff9a9a;display:block;margin-bottom:8px;font-size:14px}
+
+  footer{
+    border-top:1px solid var(--line);padding:38px 0 54px;
+    color:var(--dim);font-size:13px;
+  }
+  .foot-in{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+
+  @media (max-width:860px){
+    .nav-links a:not(.btn){display:none}
+    .stats{grid-template-columns:1fr 1fr}
+    .stat:nth-child(2){border-right:none}
+    .stat:nth-child(1),.stat:nth-child(2){border-bottom:1px solid var(--line)}
+    .compare,.grid-3{grid-template-columns:1fr}
+    .flow{grid-template-columns:1fr}
+    .flow-item:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-19px;transform:translateX(-50%)}
+    .hero{padding:56px 0 44px}
+    section{padding:60px 0}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <div class="logo">
+        <span class="logo-mark">R</span>
+        <span>反向开单器</span>
+      </div>
+      <div class="nav-links">
+        <a href="#how">工作原理</a>
+        <a href="#feature">核心能力</a>
+        <a href="#safety">安全机制</a>
+        <a href="#start">快速开始</a>
+        <a class="btn btn-primary" href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="badge"><span class="dot"></span>OKX V5 OpenAPI · AI Builder Program</div>
+    <h1>一单入场，<span class="hl">机器负责反手</span></h1>
+    <p class="lead">
+      常开运行的自动反手引擎。监听账户内全部 U 本位永续订单，
+      检测到<b>增仓单</b>立即平掉并反向开仓；检测到<b>平仓单</b>自动放行，
+      不会把你锁死在仓位里。
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#start">立即部署</a>
+      <a class="btn btn-ghost" href="#how">看它怎么工作</a>
+    </div>
+
+    <div class="terminal">
+      <div class="term-bar">
+        <i></i><i></i><i></i>
+        <span class="term-title">node src/start.js --live</span>
+      </div>
+      <div class="term-body">
+        模式        : 实盘 / 真实执行<br>
+        监听品种    : 全部 U 本位永续<br>
+        <span class="dimline">────────────────────────────────────────</span><br>
+        <span class="ts">[06:48:47.491]</span> <span class="hit">发现新订单</span> DOGE-USDT-SWAP buy 0.01 market state=filled<br>
+        <span class="ts">[06:48:49.033]</span> <span class="act">市价单/已成交，无法撤单，走「平仓 + 反开」</span><br>
+        <span class="ts">[06:48:49.827]</span> <span class="act">→ 反向 sell 0.02 张（成交 0.01 张 ×2）</span><br>
+        <span class="ts">[06:48:50.569]</span> <span class="ok">✓ 已下反向单 ordId=4028643429057777664，耗时 3076ms</span><br>
+        <span class="ts">[06:48:53.183]</span> <span class="skip">跳过工具自身订单（clOrdId=RV…）</span><br>
+        <span class="dimline">── 持仓 +0.01 → -0.01，方向已翻转 ──</span>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="k">1.5s</div><div class="v">轮询检测间隔</div></div>
+      <div class="stat"><div class="k">3</div><div class="v">层防循环机制</div></div>
+      <div class="stat"><div class="k">0</div><div class="v">第三方依赖</div></div>
+      <div class="stat"><div class="k">全部</div><div class="v">U 本位永续合约</div></div>
+    </div>
+  </div>
+
+  <!-- 问题 -->
+  <section>
+    <div class="sec-head">
+      <div class="sec-tag">Problem</div>
+      <h2>手动反手，慢的不是手，是流程</h2>
+      <p class="sec-sub">
+        发现方向做反了，到真正拿到反向持仓，中间有三个不可压缩的动作。
+        行情不会等你把这三个动作做完。
+      </p>
+    </div>
+    <div class="compare">
+      <div class="card bad">
+        <h3>手动反手 · 约 5 秒</h3>
+        <ol class="steps">
+          <li>发现方向做反，切到交易页</li>
+          <li>撤掉挂单 / 市价平掉已成交仓位</li>
+          <li>重新选择方向、填写数量、确认下单</li>
+          <li>滑点已经发生，且每一步都可能点错</li>
+        </ol>
+      </div>
+      <div class="card good">
+        <h3>反向开单器 · 一步</h3>
+        <ol class="steps">
+          <li>你在 OKX App 或网页照常下单</li>
+          <li>引擎检测到增仓单并自动接管</li>
+          <li>自动判断走「撤单或平仓 + 反向开」</li>
+          <li>反向持仓到位，全程不需要你操作</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- 原理 -->
+  <section id="how">
+    <div class="sec-head">
+      <div class="sec-tag">How it works</div>
+      <h2>四步闭环，每一步都有明确边界</h2>
+      <p class="sec-sub">
+        引擎不猜测你的意图，只对「订单」这个事实做反应，因此行为可预测、可复现。
+      </p>
+    </div>
+    <div class="flow">
+      <div class="flow-item">
+        <div class="n">STEP 01</div>
+        <h4>监听</h4>
+        <p>轮询订单列表做差量比对，启动时将存量订单全部标记为已知，历史单不会被误伤。</p>
+      </div>
+      <div class="flow-item">
+        <div class="n">STEP 02</div>
+        <h4>判定</h4>
+        <p>反推成交前持仓，判断这笔单是增仓还是减仓。减仓单直接放行，不介入。</p>
+      </div>
+      <div class="flow-item">
+        <div class="n">STEP 03</div>
+        <h4>执行</h4>
+        <p>限价单未成交则撤单后 1:1 反向；市价或已成交则按 2 倍成交量反向，实现净持仓翻转。</p>
+      </div>
+      <div class="flow-item">
+        <div class="n">STEP 04</div>
+        <h4>闭环</h4>
+        <p>反向单带专属标签，被引擎自身识别并跳过，不会触发二次反手。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 特性 -->
+  <section id="feature">
+    <div class="sec-head">
+      <div class="sec-tag">Capabilities</div>
+      <h2>为真实盘面写的，不是演示稿</h2>
+    </div>
+    <div class="grid-3">
+      <div class="feat">
+        <div class="ico">01</div>
+        <h4>净持仓模式适配</h4>
+        <p>OKX 买卖模式下，1:1 反向只会平仓归零。引擎按 2 倍成交量下单，才能真正拿到反向持仓。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">02</div>
+        <h4>市价单也能反</h4>
+        <p>市价单是 IOC，物理上无法撤销。引擎自动改走「平仓 + 反开」路径，不再依赖撤单接口。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">03</div>
+        <h4>平仓单放行</h4>
+        <p>用成交前持仓判定减仓单，避免「平不掉仓」的死锁。你能正常开仓，也能正常平仓。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">04</div>
+        <h4>合约面值计算</h4>
+        <p>名义价值按「张数 × 合约面值 × 价格」计算，每张 ETH 是 0.1 ETH 而非 1 ETH，不会算错。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">05</div>
+        <h4>撤单异常全覆盖</h4>
+        <p>处理 51403、51413（不可撤）、51400、51405（已成交）、51410（撤单在途）等真实错误码。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">06</div>
+        <h4>Builder 归因</h4>
+        <p>下单请求自动携带 AI Builder Code（tag 字段），交易可被工作台识别并计入返佣。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安全 -->
+  <section id="safety">
+    <div class="sec-head">
+      <div class="sec-tag">Guard rails</div>
+      <h2>防循环做在代码层，不靠配置</h2>
+      <p class="sec-sub">
+        自动反手最大的风险是自己的单被自己反手。引擎用三层机制保证这件事不会发生。
+      </p>
+    </div>
+    <div class="safety">
+      <div class="safety-row">
+        <span class="tag">LAYER 1</span>
+        <div>
+          <h4>订单标签识别</h4>
+          <p>引擎下的每一张单，clOrdId 强制以固定前缀开头。检测到该前缀直接跳过，从源头切断循环。</p>
+        </div>
+      </div>
+      <div class="safety-row">
+        <span class="tag">LAYER 2</span>
+        <div>
+          <h4>同品种互斥锁</h4>
+          <p>同一合约的反手执行期间加锁，并发的第二笔不会交叉下单，避免持仓被算错。</p>
+        </div>
+      </div>
+      <div class="safety-row">
+        <span class="tag">LAYER 3</span>
+        <div>
+          <h4>启动基线</h4>
+          <p>启动时先拉取存量订单建立白名单，只有启动之后新出现的单才会被处理。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 快速开始 -->
+  <section id="start">
+    <div class="sec-head">
+      <div class="sec-tag">Quick start</div>
+      <h2>零依赖，Node 直接跑</h2>
+      <p class="sec-sub">只需要 Node 18 以上版本，不需要安装任何 npm 包。</p>
+    </div>
+<pre><span class="c"># 1. 克隆</span>
+git clone https://github.com/&lt;your-name&gt;/okx-reverse-order.git
+<span class="k">cd</span> okx-reverse-order
+
+<span class="c"># 2. 配置凭证（只开读取 + 交易权限，切勿开启提币）</span>
+cp .env.example .env
+
+<span class="c"># 3. 先跑只读体检，确认账户模式与持仓</span>
+node scripts/p0-check.js --live
+
+<span class="c"># 4. 演练模式：只检测不下单</span>
+node src/start.js
+
+<span class="c"># 5. 确认无误后切实盘</span>
+node src/start.js --live</pre>
+
+    <div style="margin-top:34px">
+      <table class="tbl">
+        <thead>
+          <tr><th>接口</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>POST /api/v5/trade/order</td><td>反向开仓，携带 tag 归因</td></tr>
+          <tr><td>POST /api/v5/trade/cancel-order</td><td>撤销未成交限价单</td></tr>
+          <tr><td>GET /api/v5/account/positions</td><td>读取净持仓，判定增仓或减仓</td></tr>
+          <tr><td>GET /api/v5/trade/orders-history</td><td>轮询差量，发现新订单</td></tr>
+          <tr><td>GET /api/v5/public/instruments</td><td>读取合约面值与下单精度</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 声明 -->
+  <section>
+    <div class="notice">
+      <strong>风险提示</strong>
+      本工具为开源原型，按「现状」提供，不构成投资建议，不承诺任何收益。
+      自动反手会真实改变你的持仓方向与保证金占用，行情剧烈波动时可能造成亏损。
+      请先在演练模式与小额仓位上验证，确认行为符合预期后再用于实盘。
+      你的 API 凭证仅保存在本地环境变量文件中，请勿提交至代码仓库。
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <div>反向开单器 · 基于 OKX V5 OpenAPI 构建</div>
+    <div>MIT License</div>
+  </div>
+</footer>
+
+</body>
+</html>
