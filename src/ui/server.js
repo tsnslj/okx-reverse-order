@@ -181,6 +181,24 @@ function explainError(msg, proxyState) {
     };
   }
 
+  if (/50111/.test(m) || /Invalid OK-ACCESS-KEY/i.test(m)) {
+    return {
+      kind: 'bad-key',
+      hint: 'API Key 无效：可能复制时少了字符、这把 Key 已被删除，或者填成了另一个环境（实盘/模拟盘）的 Key。',
+    };
+  }
+
+  if (/50105/.test(m) || /Passphrase/i.test(m)) {
+    return {
+      kind: 'bad-pass',
+      hint: 'Passphrase 不对：这是创建 Key 时你自己设的密码，OKX 后台查不到。实在想不起来只能重建一把 Key。',
+    };
+  }
+
+  if (/50103|50104|50106/.test(m)) {
+    return { kind: 'bad-key', hint: '请求头缺少必要字段，重新保存一次 API 凭证试试。' };
+  }
+
   if (/50101/.test(m)) {
     return {
       kind: 'env-mismatch',

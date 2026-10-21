@@ -1028,10 +1028,10 @@ function wzRender() {
         编辑这把 Key，把该 IP 加进白名单，保存后回来点「重新验证」。<br>
         <span style="color:#c9a0a7">（白名单改动最长需要 30 秒生效）</span>
       </div>`;
-    } else if (r.kind === 'sign' || r.kind === 'env-mismatch') {
-      extra = `<div class="wz-err">${escapeHtml(r.hint || '')}<br>点「上一步」回去改一下。</div>`;
+    } else if (['sign', 'env-mismatch', 'bad-key', 'bad-pass'].includes(r.kind)) {
+      extra = `<div class="wz-err">${escapeHtml(r.hint || r.error || '')}<br>点「上一步」回去检查一下填的内容。</div>`;
     } else {
-      extra = `<div class="wz-err">${escapeHtml(r.error || '')}</div>`;
+      extra = `<div class="wz-err">${escapeHtml(r.hint || r.error || '')}</div>`;
     }
   }
 

@@ -194,7 +194,7 @@ class OrderWatcher {
     console.log('  怎么修：');
     console.log('    1. 打开 https://www.okx.com/account/my-api');
     console.log('    2. 编辑这把 Key 的 IP 地址，把上面那个 IP 加进去');
-    console.log('       （Clash 换了节点，出口 IP 就会变；建议在 Clash 里手动锁定一个节点）');
+    console.log('       （出口 IP 会变：家宽重新拨号会变，走代理时换节点也会变）');
     console.log('    3. 改完重新启动本工具');
     console.log('');
     console.log(`  在你修好之前，工具不会反手任何订单。`);
@@ -206,7 +206,7 @@ class OrderWatcher {
     process.exit(2);
   }
 
-  /** 代理没开：这是用户一秒钟就能修好的事，不该重试 45 秒然后含糊其辞 */
+  /** 网络通道整个不通：重试几分钟也没用，停机说清楚，别空转 */
   dieProxy(err) {
     this.running = false;
     if (this.timer) clearTimeout(this.timer);
@@ -214,15 +214,16 @@ class OrderWatcher {
 
     console.log('');
     console.log('════════════════════════════════════════════════════════');
-    console.log('  ✗ 已停止运行：代理没开，连不上 OKX');
+    console.log('  ✗ 已停止运行：网络通道不通，连不上 OKX');
     console.log('════════════════════════════════════════════════════════');
     console.log(`  ${err.message}`);
     console.log('');
-    console.log('  OKX 在国内必须走代理（域名被污染，直连解析到假地址）。');
+    console.log('  直连通道和代理都不通。');
     console.log('');
     console.log('  怎么修：');
-    console.log('    1. 打开 Clash Verge（确认端口是 7897，别只开系统托盘图标）');
-    console.log('    2. 回到控制台点「重新检测」，显示端口已连通后再启动反手');
+    console.log('    1. 先确认这台电脑能正常打开网页');
+    console.log('    2. 回到控制台，设置里的「网络通道」选「自动」，再点「重新检测」');
+    console.log('    3. 如果所在网络封了境外服务器，填一个代理地址再启动');
     console.log('');
     console.log('  在你修好之前，工具不会反手任何订单。');
     console.log('════════════════════════════════════════════════════════');
@@ -258,9 +259,9 @@ class OrderWatcher {
           console.log(`  最后一次错误：${e.message}`);
           console.log('');
           console.log('  常见原因：');
-          console.log('    · 代理软件（Clash）没开，或节点不通');
           console.log('    · 本机网络断开');
-          console.log('    · OKX 域名被 DNS 污染，且没有配置 OKX_PROXY');
+          console.log('    · 当前网络封了境外服务器（直连和代理都不通）');
+          console.log('    · OKX 正在维护');
           console.log('');
           console.log('  修好网络后重新启动即可，本次没有下任何单。');
           console.log('════════════════════════════════════════════════════════');
@@ -290,7 +291,7 @@ class OrderWatcher {
         const code = fatalCode(e);
         if (code) return this.die(e, code);
 
-        // 代理进程被关掉：不会自己好，停机让人去开 Clash，别在这里空转
+        // 网络通道整个不通：不会自己好，停机说清楚，别在这里空转
         if (/代理未启动|ECONNREFUSED/i.test(e.message)) return this.dieProxy(e);
 
         // 网络类问题：指数退避，且只在关键节点打印，避免一个小时刷 7 万字
