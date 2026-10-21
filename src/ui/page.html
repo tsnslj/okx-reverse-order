@@ -138,10 +138,12 @@
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:7px}
   .field label em{font-style:normal;color:var(--dim);font-size:11.5px;margin-left:6px}
-  .field input[type=text],.field input[type=password],.field input[type=number]{
+  .field input[type=text],.field input[type=password],.field input[type=number],.field select{
     width:100%;padding:10px 13px;border-radius:9px;border:1px solid var(--line);
     background:#0c1219;color:var(--text);font-size:13.5px;font-family:var(--mono);outline:none;transition:.15s;
   }
+  .field select{cursor:pointer;font-family:inherit;font-size:13px}
+  .field select option{background:#0c1219;color:var(--text)}
   .field input:focus{border-color:#2f7f63;box-shadow:0 0 0 3px rgba(61,220,151,.10)}
   .field input::placeholder{color:#48566a;font-family:inherit}
   .hint{color:var(--dim);font-size:11.5px;margin-top:6px;line-height:1.6}
@@ -199,6 +201,91 @@
     .topbar{flex-direction:column;align-items:stretch;gap:10px}
     .topActions{display:flex;gap:8px}
     .topActions .btn{flex:1}
+  }
+
+  /* ══════════ 首次配置向导 ══════════ */
+  .wz{
+    position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1200px 600px at 50% -10%,#16202b 0%,#080b10 70%);
+    padding:24px;overflow:auto;
+  }
+  .wz[hidden]{display:none}
+  .wz-card{
+    width:100%;max-width:620px;background:var(--panel);border:1px solid var(--line);
+    border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden;
+  }
+  .wz-head{display:flex;align-items:center;gap:13px;padding:22px 24px 0}
+  .wz-head h2{margin:0;font-size:17px;letter-spacing:.2px}
+  .wz-head p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+  .wz-close{
+    margin-left:auto;border:0;background:transparent;color:var(--dim);font-size:22px;
+    cursor:pointer;line-height:1;padding:4px 6px;border-radius:8px;
+  }
+  .wz-close:hover{background:#1b2431;color:var(--text)}
+
+  .wz-bar{display:flex;gap:6px;padding:18px 24px 0}
+  .wz-bar i{height:3px;flex:1;border-radius:3px;background:#1e2733;transition:.25s}
+  .wz-bar i.on{background:var(--accent)}
+  .wz-bar i.done{background:#2a7f60}
+
+  .wz-body{padding:20px 24px 6px;min-height:238px}
+  .wz-h{font-size:15px;font-weight:600;margin:0 0 6px}
+  .wz-sub{color:var(--muted);font-size:13px;margin:0 0 18px;line-height:1.65}
+
+  .wz-field{margin-bottom:14px}
+  .wz-field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+  .wz-field input{
+    width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--line);
+    background:#0d131a;color:var(--text);font-size:13.5px;font-family:var(--mono);
+  }
+  .wz-field input:focus{outline:0;border-color:#2f6b53;box-shadow:0 0 0 3px rgba(61,220,151,.09)}
+
+  .wz-check{
+    display:flex;align-items:center;gap:11px;padding:14px 16px;border-radius:11px;
+    border:1px solid var(--line);background:var(--panel2);margin-bottom:10px;
+  }
+  .wz-check .ic{
+    width:22px;height:22px;flex:0 0 22px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:13px;font-weight:700;
+  }
+  .wz-check.ok .ic{background:rgba(61,220,151,.16);color:var(--accent)}
+  .wz-check.bad .ic{background:rgba(246,70,93,.16);color:var(--up)}
+  .wz-check.run .ic{background:#1e2733;color:var(--muted)}
+  .wz-check .tx{min-width:0;flex:1}
+  .wz-check .tx b{display:block;font-size:13.5px;font-weight:600}
+  .wz-check .tx span{font-size:12px;color:var(--dim)}
+
+  .wz-ip{
+    display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:11px;
+    background:linear-gradient(160deg,rgba(61,220,151,.08),var(--panel2));
+    border:1px solid rgba(61,220,151,.35);margin-bottom:14px;
+  }
+  .wz-ip .v{font-family:var(--mono);font-size:19px;letter-spacing:.4px}
+  .wz-ip .l{font-size:11.5px;color:var(--muted);margin-bottom:2px}
+  .wz-ip .btn{margin-left:auto;flex-shrink:0}
+
+  .wz-note{
+    font-size:12.5px;color:#9fb0c2;background:#0f151d;border:1px solid var(--line);
+    border-radius:10px;padding:12px 14px;line-height:1.7;
+  }
+  .wz-note b{color:var(--text)}
+  .wz-note a{color:var(--accent);text-decoration:none}
+  .wz-note a:hover{text-decoration:underline}
+
+  .wz-foot{
+    display:flex;align-items:center;gap:10px;padding:16px 24px 22px;
+    border-top:1px solid var(--line);margin-top:14px;
+  }
+  .wz-foot .sp{margin-left:auto}
+  .wz-err{
+    color:#ff8b9a;font-size:12.5px;background:rgba(246,70,93,.08);
+    border:1px solid rgba(246,70,93,.25);border-radius:9px;padding:11px 13px;margin-top:12px;
+    line-height:1.6;
+  }
+  .wz-ok{
+    color:#7ce8b8;font-size:12.5px;background:rgba(61,220,151,.08);
+    border:1px solid rgba(61,220,151,.25);border-radius:9px;padding:11px 13px;margin-top:12px;
+    line-height:1.6;
   }
 </style>
 </head>
@@ -288,13 +375,14 @@
         </header>
         <div class="body">
           <div class="iprow">
-            <div class="ipbox">
-              <div class="lb">直连出口 <span class="tag">家用宽带</span></div>
+            <div class="ipbox" id="boxDirect">
+              <div class="lb" id="lbDirect">直连出口 <span class="tag">家用宽带</span></div>
               <div class="ip" id="ipDirect">—</div>
               <div class="meta" id="ipDirectMeta">检测中…</div>
+              <button class="btn sm cp" id="btnCopyIp2" title="复制">复制</button>
             </div>
-            <div class="ipbox hl">
-              <div class="lb">代理出口 <span class="tag">OKX 看到的</span></div>
+            <div class="ipbox hl" id="boxProxy">
+              <div class="lb" id="lbProxy">代理出口 <span class="tag">OKX 看到的</span></div>
               <div class="ip" id="ipProxy">—</div>
               <div class="meta" id="ipProxyMeta">检测中…</div>
               <button class="btn sm cp" id="btnCopyIp" title="复制">复制</button>
@@ -339,9 +427,20 @@
             </div>
           </div>
           <div class="field">
-            <label>代理地址 <em>大陆网络必填</em></label>
-            <input type="text" id="fProxy" placeholder="http://127.0.0.1:7897" spellcheck="false" />
-            <div class="hint" id="proxyState">Clash Verge 默认 7897，Clash for Windows 常见 7890。填错会连不上 OKX。</div>
+            <label>网络通道</label>
+            <select id="fNetMode">
+              <option value="auto">自动（推荐）· 先直连，不通再走代理</option>
+              <option value="direct">只用直连 · 不依赖任何代理软件</option>
+              <option value="proxy">只用代理 · 每次都走下面填的地址</option>
+            </select>
+            <div class="hint" id="netModeState">
+              默认「自动」就行。程序内置直连通道，会自动绕开国内对 OKX 域名的干扰，绝大多数人不需要代理。
+            </div>
+          </div>
+          <div class="field">
+            <label>代理地址 <em>可选</em></label>
+            <input type="text" id="fProxy" placeholder="不用代理就留空，例如 http://127.0.0.1:7897" spellcheck="false" />
+            <div class="hint" id="proxyState">直连能通就不用填。填了之后，「自动」模式下只在直连失败时才启用。</div>
           </div>
         </div>
       </div>
@@ -393,6 +492,27 @@
       <div class="logwrap" id="logWrap"><pre id="log"></pre></div>
     </section>
   </main>
+</div>
+
+<!-- ══════════ 首次配置向导 ══════════ -->
+<div class="wz" id="wz" hidden>
+  <div class="wz-card">
+    <div class="wz-head">
+      <div class="mark">↺</div>
+      <div>
+        <h2>首次配置</h2>
+        <p>三步完成 · 不需要装任何代理软件</p>
+      </div>
+      <button class="wz-close" id="wzClose" title="跳过，我自己配">×</button>
+    </div>
+    <div class="wz-bar" id="wzBar"><i></i><i></i><i></i></div>
+    <div class="wz-body" id="wzBody"></div>
+    <div class="wz-foot">
+      <button class="btn ghost" id="wzPrev">上一步</button>
+      <span class="sp"></span>
+      <button class="btn primary" id="wzNext">下一步</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -514,12 +634,12 @@ function renderProxyState(px) {
   const el = $('#proxyState');
   if (!el) return;
   if (!px || !px.configured) {
-    el.innerHTML = 'Clash Verge 默认 7897，Clash for Windows 常见 7890。填错会连不上 OKX。';
+    el.innerHTML = '没填代理。直连通道能通，这一栏可以一直空着。';
     return;
   }
   el.innerHTML = px.alive
-    ? `<span style="color:var(--accent)">● 端口 ${px.port} 已连通</span>`
-    : `<span style="color:var(--up)">● 端口 ${px.port} 没有监听 —— Clash 是不是没开？</span>`;
+    ? `<span style="color:var(--accent)">● 本地端口 ${px.port} 已连通，可作兜底通道</span>`
+    : `<span style="color:var(--warn)">● 端口 ${px.port} 没有监听（代理没开）。「自动」模式下会改走直连，不受影响。</span>`;
 }
 
 async function redetectNet(btn) {
@@ -615,6 +735,9 @@ async function refreshIp() {
   const r = await api('/api/ip');
   S.ip = r;
 
+  // 实际在用哪条出口，决定「OKX 看到的」到底是哪一栏
+  const proxyInUse = !!(r.proxyConfigured && r.proxy && r.proxy.ok);
+
   if (r.direct && r.direct.ok) {
     $('#ipDirect').textContent = r.direct.ip;
     $('#ipDirectMeta').textContent = '来源 ' + r.direct.source;
@@ -623,30 +746,43 @@ async function refreshIp() {
     $('#ipDirectMeta').textContent = (r.direct && r.direct.error) || '';
   }
 
-  if (r.proxy && r.proxy.ok) {
+  if (proxyInUse) {
     $('#ipProxy').textContent = r.proxy.ip;
-    $('#ipProxyMeta').textContent = '来源 ' + r.proxy.source + ' · 这个填进白名单';
-    $('#btnCopyIp').disabled = false;
+    $('#ipProxyMeta').textContent = '来源 ' + r.proxy.source;
+  } else if (!r.proxyConfigured) {
+    $('#ipProxy').textContent = '未启用';
+    $('#ipProxyMeta').textContent = '没有配置代理，走直连';
   } else {
     $('#ipProxy').textContent = '未生效';
     $('#ipProxyMeta').textContent = (r.proxy && r.proxy.error) || '代理未配置';
-    $('#btnCopyIp').disabled = true;
   }
+
+  // 高亮真正被 OKX 看到的那个地址
+  const hlDirect = !proxyInUse;
+  $('#boxDirect').classList.toggle('hl', hlDirect);
+  $('#boxProxy').classList.toggle('hl', !hlDirect);
+  $('#lbDirect').innerHTML = hlDirect
+    ? '直连出口 <span class="tag">OKX 看到的</span>'
+    : '直连出口 <span class="tag">家用宽带</span>';
+  $('#lbProxy').innerHTML = hlDirect
+    ? '代理出口 <span class="tag">未启用</span>'
+    : '代理出口 <span class="tag">OKX 看到的</span>';
 
   $('#ipHint').innerHTML = r.hint
     ? `<span style="color:var(--warn)">⚠ ${escapeHtml(r.hint)}</span>`
-    : '白名单要填的是右边这个地址：代理节点一变，它就变。所以在 Clash 里锁定一个节点，别用「自动选择」。';
+    : '白名单要填的是高亮那一栏。家宽 IP 变了界面会提醒，重新复制一次去 OKX 更新即可。';
 }
 $('#btnIp').addEventListener('click', refreshIp);
-$('#btnCopyIp').addEventListener('click', async () => {
-  const v = $('#ipProxy').textContent;
-  if (!v || v === '—') return;
+
+async function copyText(v, btn) {
+  if (!v || v === '—' || v === '未启用' || v === '未生效' || v === '检测失败') return;
   try {
     await navigator.clipboard.writeText(v);
-    const b = $('#btnCopyIp'); const old = b.textContent;
-    b.textContent = '已复制'; setTimeout(() => (b.textContent = old), 1200);
+    if (btn) { const old = btn.textContent; btn.textContent = '已复制'; setTimeout(() => (btn.textContent = old), 1200); }
   } catch { /* 浏览器不允许剪贴板时忽略 */ }
-});
+}
+$('#btnCopyIp').addEventListener('click', (e) => copyText($('#ipProxy').textContent, e.target));
+$('#btnCopyIp2').addEventListener('click', (e) => copyText($('#ipDirect').textContent, e.target));
 
 /* ── 保存 / 测试 ── */
 function flash(kind, text) {
@@ -663,6 +799,7 @@ $('#btnSave').addEventListener('click', async () => {
     secretKey: $('#fSecret').value,
     passphrase: $('#fPass').value,
     proxy: $('#fProxy').value.trim(),
+    networkMode: $('#fNetMode') ? $('#fNetMode').value : 'auto',
     builderCode: $('#fBuilder').value.trim(),
   };
   const r = await api('/api/config', { method: 'POST', body: JSON.stringify(body) });
@@ -693,6 +830,7 @@ $('#btnTest').addEventListener('click', async () => {
 function applyConfig(c) {
   S.config = c;
   $('#fProxy').value = c.proxy || '';
+  if ($('#fNetMode')) $('#fNetMode').value = c.networkMode || 'auto';
   $('#fBuilder').value = c.builderCode || '';
   $('#envPath').textContent = '配置文件：' + c.envFile;
   $('#hApiKey').textContent = c.hasApiKey
@@ -716,14 +854,14 @@ $('#btnStart').addEventListener('click', async () => {
     if (!ok) return;
   }
 
-  // 代理没开就启动，等于启动了个什么都做不了的进程 —— 先拦住
+  // 只有「强制走代理」模式下，代理没开才需要拦
   const px = await api('/api/proxy');
   renderProxyState(px);
-  if (px.configured && !px.alive) {
+  if (S.config.networkMode === 'proxy' && px.configured && !px.alive) {
     go('overview');
     showNetIssue({
       kind: 'proxy-down',
-      hint: `代理 ${px.host}:${px.port} 没有监听，Clash 没开。启动后引擎连不上 OKX，不会反手任何单。请先打开 Clash，再点「重新检测」。`,
+      hint: `网络模式被设成「只用代理」，但 ${px.host}:${px.port} 没有监听。把代理打开，或者去设置里把模式改回「自动」。`,
     });
     return;
   }
@@ -768,6 +906,249 @@ function connectEvents() {
 }
 $('#autoScroll').addEventListener('change', () => scrollLog(true));
 
+/* ══════════ 首次配置向导 ══════════ */
+const WZ = {
+  step: 1,
+  netOk: null,     // null=检测中 / true / false
+  netMs: 0,
+  netHint: '',
+  ip: '',
+  result: null,
+  busy: false,
+};
+
+function wzBar() {
+  $('#wzBar').innerHTML = [1, 2, 3]
+    .map((n) => `<i class="${n < WZ.step ? 'done' : n === WZ.step ? 'on' : ''}"></i>`)
+    .join('');
+}
+
+function wzRender() {
+  wzBar();
+  const body = $('#wzBody');
+  const prev = $('#wzPrev');
+  const next = $('#wzNext');
+
+  prev.style.visibility = WZ.step === 1 ? 'hidden' : 'visible';
+  prev.disabled = WZ.busy;
+  next.disabled = WZ.busy || (WZ.step === 1 && WZ.netOk === null);
+
+  // ── 第 1 步：网络 ──
+  if (WZ.step === 1) {
+    const cls = WZ.netOk === null ? 'run' : WZ.netOk ? 'ok' : 'bad';
+    const icon = WZ.netOk === null ? '…' : WZ.netOk ? '✓' : '!';
+    const title =
+      WZ.netOk === null ? '正在检测网络通道' : WZ.netOk ? '已连上 OKX 服务器' : '连不上 OKX';
+    const sub =
+      WZ.netOk === null
+        ? '首次启动需要一两秒'
+        : WZ.netOk
+        ? `直连可用 ${WZ.netMs}ms · 不需要代理软件`
+        : WZ.netHint || '本机可能没有联网';
+
+    body.innerHTML = `
+      <h3 class="wz-h">检查网络通道</h3>
+      <p class="wz-sub">这一步全自动。程序内置直连通道，会自己绕开国内对 OKX 域名的干扰。</p>
+      <div class="wz-check ${cls}">
+        <div class="ic">${icon}</div>
+        <div class="tx"><b>${title}</b><span>${escapeHtml(sub)}</span></div>
+        <button class="btn sm ghost" onclick="wzCheckNet()" ${WZ.busy ? 'disabled' : ''}>重新检测</button>
+      </div>
+      <div class="wz-note">
+        检测结果是「不通」时，一般只有两种情况：<b>电脑没联网</b>，或者当前网络封了境外服务器。<br>
+        可以先点「重新检测」再试一次；仍然不通的话，先跳过向导，在设置里填一个代理地址。
+      </div>`;
+
+    next.textContent = WZ.netOk === null ? '检测中…' : '下一步';
+    return;
+  }
+
+  // ── 第 2 步：API 凭证 ──
+  if (WZ.step === 2) {
+    const has = S.config.hasApiKey;
+    body.innerHTML = `
+      <h3 class="wz-h">填入 OKX API</h3>
+      <p class="wz-sub">去 OKX 建一把 API Key，权限只勾「读取」和「交易」，然后粘进来。</p>
+      <div class="wz-ip">
+        <div>
+          <div class="l">你的出口 IP · 创建 Key 时填进白名单</div>
+          <div class="v" id="wzIpVal">${WZ.ip ? escapeHtml(WZ.ip) : '获取中…'}</div>
+        </div>
+        <button class="btn sm" onclick="wzCopyIp(this)">复制</button>
+      </div>
+      <div class="wz-field">
+        <label>API Key</label>
+        <input id="wzKey" placeholder="${has ? '已保存，留空表示不修改' : 'a521867c-895b-4df5-bbf5-…'}" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="wz-field">
+        <label>Secret Key</label>
+        <input id="wzSecret" type="password" placeholder="${has ? '已保存，留空表示不修改' : '创建 Key 时显示的那串'}" autocomplete="off" />
+      </div>
+      <div class="wz-field">
+        <label>Passphrase</label>
+        <input id="wzPass" type="password" placeholder="创建 Key 时你自己设的密码，OKX 后台查不到" autocomplete="off" />
+      </div>
+      <div class="wz-note">
+        还没有 Key？<a href="https://www.okx.com/account/my-api" target="_blank" rel="noreferrer">打开 OKX API 管理页 ↗</a><br>
+        创建时：权限勾 <b>读取 + 交易</b>，<b>不要勾「提币」</b>；IP 白名单粘贴上面那个地址。
+      </div>
+      <div class="wz-err" id="wzKeyErr" style="display:none"></div>`;
+
+    next.textContent = '保存并继续';
+    return;
+  }
+
+  // ── 第 3 步：验证 ──
+  const r = WZ.result;
+  let row;
+  if (WZ.busy) {
+    row = `<div class="wz-check run"><div class="ic">…</div>
+      <div class="tx"><b>正在连接 OKX</b><span>用你的 Key 发一个真实请求</span></div></div>`;
+  } else if (r && r.ok) {
+    row = `<div class="wz-check ok"><div class="ic">✓</div>
+      <div class="tx"><b>连接成功</b><span>UID ${escapeHtml(r.uid || '')} · ${
+        r.posMode === 'net_mode' ? '买卖模式' : '开平仓模式'
+      } · 权益 ${fmt(r.totalEq)} USDT · ${r.ms}ms</span></div></div>`;
+  } else if (r && !r.ok) {
+    row = `<div class="wz-check bad"><div class="ic">!</div>
+      <div class="tx"><b>连接失败</b><span>${escapeHtml(r.hint || r.error || '未知错误')}</span></div></div>`;
+  } else {
+    row = `<div class="wz-check run"><div class="ic">3</div>
+      <div class="tx"><b>还没验证</b><span>点右下角「开始验证」</span></div></div>`;
+  }
+
+  let extra = '';
+  if (r && r.ok) {
+    extra = `<div class="wz-ok">验证通过。点「进入控制台」就可以启动反手引擎了。</div>`;
+  } else if (r && !r.ok) {
+    if (r.kind === 'whitelist') {
+      extra = `<div class="wz-err">
+        这个 IP 还没进白名单：<b style="font-family:var(--mono)">${escapeHtml(r.ip || WZ.ip || '')}</b><br>
+        去 <a href="https://www.okx.com/account/my-api" target="_blank" rel="noreferrer" style="color:#7ce8b8">OKX API 管理页</a>
+        编辑这把 Key，把该 IP 加进白名单，保存后回来点「重新验证」。<br>
+        <span style="color:#c9a0a7">（白名单改动最长需要 30 秒生效）</span>
+      </div>`;
+    } else if (r.kind === 'sign' || r.kind === 'env-mismatch') {
+      extra = `<div class="wz-err">${escapeHtml(r.hint || '')}<br>点「上一步」回去改一下。</div>`;
+    } else {
+      extra = `<div class="wz-err">${escapeHtml(r.error || '')}</div>`;
+    }
+  }
+
+  body.innerHTML = `
+    <h3 class="wz-h">验证并完成</h3>
+    <p class="wz-sub">程序会用你刚填的 Key 真的连一次 OKX，确认能读账户、能下单。</p>
+    ${row}${extra}`;
+
+  next.textContent = r && r.ok ? '进入控制台' : WZ.busy ? '验证中…' : '开始验证';
+}
+
+async function wzCheckNet() {
+  WZ.busy = true;
+  WZ.netOk = null;
+  wzRender();
+  try {
+    const r = await api('/api/setup/network', { method: 'POST' });
+    WZ.netOk = !!r.ok;
+    WZ.netMs = (r.network && r.network.ms) || 0;
+    WZ.netHint = r.hint || '';
+    // 顺手把出口 IP 拿回来，下一步要展示
+    const s = await api('/api/setup').catch(() => null);
+    if (s && s.ip) WZ.ip = s.ip;
+  } catch {
+    WZ.netOk = false;
+    WZ.netHint = '检测过程出错，检查本机网络';
+  }
+  WZ.busy = false;
+  wzRender();
+}
+
+async function wzCopyIp(btn) {
+  if (!WZ.ip) return;
+  try {
+    await navigator.clipboard.writeText(WZ.ip);
+    if (btn) {
+      const old = btn.textContent;
+      btn.textContent = '已复制';
+      setTimeout(() => (btn.textContent = old), 1200);
+    }
+  } catch { /* 剪贴板权限被拒就算了，IP 就显示在旁边 */ }
+}
+
+async function wzSaveKeys() {
+  const key = $('#wzKey').value.trim();
+  const sec = $('#wzSecret').value.trim();
+  const pass = $('#wzPass').value;
+  const errEl = $('#wzKeyErr');
+  const showErr = (t) => { errEl.textContent = t; errEl.style.display = 'block'; };
+
+  const needKey = !S.config.hasApiKey && !key;
+  const needSec = !S.config.hasSecret && !sec;
+  const needPass = !S.config.hasPassphrase && !pass;
+  if (needKey || needSec || needPass) {
+    return showErr(`还差：${[needKey && 'API Key', needSec && 'Secret Key', needPass && 'Passphrase'].filter(Boolean).join('、')}`);
+  }
+
+  WZ.busy = true;
+  const r = await api('/api/config', {
+    method: 'POST',
+    body: JSON.stringify({ apiKey: key, secretKey: sec, passphrase: pass }),
+  });
+  WZ.busy = false;
+
+  if (!r.ok) return showErr(r.error || '保存失败');
+
+  S.config = r.config;
+  applyConfig(r.config);
+  WZ.step = 3;
+  WZ.result = null;
+  wzRender();
+  wzVerify();
+}
+
+async function wzVerify() {
+  WZ.busy = true;
+  wzRender();
+  const r = await api('/api/setup/verify', { method: 'POST' });
+  WZ.result = r;
+  WZ.busy = false;
+  if (r.ok) await api('/api/setup/done', { method: 'POST' });
+  wzRender();
+}
+
+async function wzFinish() {
+  await api('/api/setup/done', { method: 'POST' });
+  $('#wz').hidden = true;
+  go('overview');
+  refreshAccount();
+  refreshIp();
+}
+
+function wzOpen() {
+  WZ.step = 1;
+  WZ.result = null;
+  $('#wz').hidden = false;
+  wzRender();
+  wzCheckNet();
+}
+
+$('#wzNext').addEventListener('click', () => {
+  if (WZ.busy) return;
+  if (WZ.step === 1) { WZ.step = 2; return wzRender(); }
+  if (WZ.step === 2) return wzSaveKeys();
+  if (WZ.result && WZ.result.ok) return wzFinish();
+  return wzVerify();
+});
+$('#wzPrev').addEventListener('click', () => {
+  if (WZ.busy) return;
+  if (WZ.step > 1) { WZ.step -= 1; WZ.result = null; wzRender(); }
+});
+$('#wzClose').addEventListener('click', () => {
+  if (!confirm('跳过向导？之后可以在「设置」里手动填写 API。')) return;
+  $('#wz').hidden = true;
+  go('settings');
+});
+
 /* ── 启动引导 ── */
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
@@ -779,10 +1160,17 @@ function escapeHtml(s) {
   renderEngine(b.engine);
   renderProxyState(b.proxy);
   (b.logs || []).forEach(addLog);
-  if (b.config.missing && b.config.missing.length) go('settings');
-  else refreshAccount();
-  refreshIp();
   connectEvents();
+
+  // 首次打开：直接进向导，别让新用户面对一个空白控制台
+  const s = await api('/api/setup').catch(() => null);
+  if (s && s.needSetup) {
+    if (s.ip) WZ.ip = s.ip;
+    wzOpen();
+  } else {
+    refreshAccount();
+    refreshIp();
+  }
 
   setInterval(() => {
     if (S.engine.running) {

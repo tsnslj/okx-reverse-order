@@ -20,10 +20,11 @@ const net = require('net');
 const { spawn } = require('child_process');
 
 const env = require('../env');
-const { resetPool, currentProxy } = require('../okx/client');
+const { resetPool, currentProxy, networkMode } = require('../okx/client');
 const { getConfig, getPositions, getBalance } = require('../okx/account');
 const { getOrdersPending } = require('../okx/trade');
-const { detectBoth } = require('../net/ipcheck');
+const { detectBoth, detectOne } = require('../net/ipcheck');
+const direct = require('../net/direct');
 const guard = require('../core/guard');
 const { Engine } = require('./engine');
 
@@ -73,11 +74,22 @@ function configView() {
     hasPassphrase: !!env.passphrase,
     baseUrl: env.baseUrl,
     proxy: env.proxy,
+    networkMode: networkMode(),
     simulated: env.simulated,
     builderCode: env.builderCode,
     missing: env.missing,
     envFile: env.envFile,
   };
+}
+
+/**
+ * OKX 实际看到的出口 IP
+ * 直连模式下就是家宽公网 IP；走代理时是代理节点 IP
+ */
+async function okxVisibleIp() {
+  const viaProxy = networkMode() === 'proxy' && !!currentProxy();
+  const r = await detectOne({ useProxy: viaProxy });
+  return { ...r, viaProxy };
 }
 
 function json(res, code, obj) {
@@ -145,16 +157,16 @@ function explainError(msg, proxyState) {
     if (proxyState && proxyState.configured) {
       return {
         kind: 'proxy-down',
-        hint: `代理没开：${proxyState.host}:${proxyState.port} 拒绝连接。先把 Clash 打开（确认端口是这个），然后点「重新检测」。`,
+        hint: `代理没开：${proxyState.host}:${proxyState.port} 拒绝连接。把代理软件打开，或者把网络模式改回「自动」用直连通道。`,
       };
     }
-    return { kind: 'net', hint: '连接被拒绝，目标端口不通。检查代理地址是否填错。' };
+    return { kind: 'net', hint: '连接被拒绝，目标端口不通。检查本机网络是否正常。' };
   }
 
   if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(m)) {
     return {
       kind: 'dns',
-      hint: 'OKX 域名解析失败（国内网络会被污染）。必须配置代理，地址形如 http://127.0.0.1:7897。',
+      hint: '域名解析失败。本机网络可能断开了，检查能不能打开网页后点「重新检测」。',
     };
   }
 
@@ -213,6 +225,94 @@ async function handle(req, res) {
     });
   }
 
+  // ─────────── 首次配置向导 ───────────
+  //
+  // 新用户拿到程序后不用碰命令行、不用装代理：
+  // 打开页面 → 自动检测网络 → 填三个输入框 → 一键验证 → 完成
+
+  if (req.method === 'GET' && p === '/api/setup') {
+    const hasKeys = env.missing.length === 0;
+    // 用缓存判断网络，别让首屏等好几秒
+    const alive = await direct.getAliveIps().catch(() => []);
+    const netOk = alive.length > 0;
+
+    let ip = '';
+    if (hasKeys || netOk) {
+      const r = await okxVisibleIp().catch(() => null);
+      if (r && r.ok) ip = r.ip;
+    }
+
+    return json(res, 200, {
+      needSetup: !hasKeys || env.setupDone === false,
+      hasKeys,
+      missing: env.missing,
+      networkOk: netOk,
+      networkMs: alive.length ? alive[0].ms : 0,
+      networkMode: networkMode(),
+      proxyConfigured: !!currentProxy(),
+      ip,
+      directState: direct.directState(),
+      config: configView(),
+    });
+  }
+
+  // 强制重新检测网络通道
+  if (req.method === 'POST' && p === '/api/setup/network') {
+    direct.resetDirect();
+    resetPool();
+    const t0 = Date.now();
+    const net = await direct.diagnose().catch((e) => ({ ok: false, message: e.message }));
+    const px = await checkProxy();
+    return json(res, 200, {
+      ok: net.ok,
+      network: net,
+      proxy: px,
+      ms: Date.now() - t0,
+      hint: net.ok
+        ? `已连上 OKX 服务器（直连，${net.ms}ms），不需要任何代理软件。`
+        : px.alive
+        ? '直连不通，但检测到本机有代理在运行，已自动切到代理通道。'
+        : '直连不通，也没检测到代理。检查一下本机是否能正常上网。',
+    });
+  }
+
+  // 一键验证：走完整链路，返回失败原因和下一步该做什么
+  if (req.method === 'POST' && p === '/api/setup/verify') {
+    const t0 = Date.now();
+    const px = await checkProxy();
+    try {
+      const c = await getConfig({ simulated: env.simulated });
+      const bal = await getBalance({ simulated: env.simulated }).catch(() => null);
+      const ipr = await okxVisibleIp().catch(() => null);
+      return json(res, 200, {
+        ok: true,
+        uid: c.uid,
+        acctLv: c.acctLv,
+        posMode: c.posMode,
+        totalEq: bal ? bal.totalEq : null,
+        ip: ipr && ipr.ok ? ipr.ip : '',
+        ms: Date.now() - t0,
+      });
+    } catch (e) {
+      const ex = explainError(e.message, px);
+      const ipr = await okxVisibleIp().catch(() => null);
+      return json(res, 200, {
+        ok: false,
+        error: e.message,
+        kind: ex.kind,
+        hint: ex.hint,
+        ip: ex.ip || (ipr && ipr.ok ? ipr.ip : ''),
+        ms: Date.now() - t0,
+      });
+    }
+  }
+
+  // 向导完成，写进配置，下次启动直接进主界面
+  if (req.method === 'POST' && p === '/api/setup/done') {
+    env.save({ OKX_SETUP_DONE: '1' });
+    return json(res, 200, { ok: true });
+  }
+
   // ---- 代理连通性（单独探测，供「重新检测」按钮用）----
   if (req.method === 'GET' && p === '/api/proxy') {
     return json(res, 200, await checkProxy());
@@ -234,10 +334,17 @@ async function handle(req, res) {
     }
     if (typeof b.proxy === 'string') {
       const v = b.proxy.trim();
-      if (v && !/^https?:\/\/[^\s]+$/.test(v)) {
+      if (v && !/^(https?|socks5?):\/\/[^\s]+$/.test(v)) {
         return json(res, 400, { ok: false, error: '代理格式应为 http://127.0.0.1:7897' });
       }
       patch.OKX_PROXY = v;
+    }
+    if (typeof b.networkMode === 'string') {
+      const v = b.networkMode.toLowerCase();
+      if (!['auto', 'direct', 'proxy'].includes(v)) {
+        return json(res, 400, { ok: false, error: '网络模式只能是 auto / direct / proxy' });
+      }
+      patch.OKX_NETWORK = v;
     }
     if (typeof b.builderCode === 'string') {
       const v = b.builderCode.trim();
@@ -259,6 +366,7 @@ async function handle(req, res) {
 
     env.save(patch);
     resetPool(); // 代理可能改了，丢掉旧隧道
+    direct.resetDirect(); // 网络模式可能改了，直连缓存也清掉
 
     broadcast('state', engine.status());
     return json(res, 200, { ok: true, config: configView() });

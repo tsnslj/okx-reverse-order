@@ -49,8 +49,12 @@ function build(raw) {
     baseUrl: raw.OKX_BASE_URL || 'https://www.okx.com',
     simulated: raw.OKX_SIMULATED === '1',
     proxy: raw.OKX_PROXY || '',
+    // 网络通道：auto=先直连不通再走代理 | direct=只直连 | proxy=只走代理
+    networkMode: (raw.OKX_NETWORK || 'auto').toLowerCase(),
     // AI Builder Program 归因码：直接调 OpenAPI 时写入下单请求的 tag 字段
     builderCode: (raw.OKX_BUILDER_CODE || '').trim(),
+    // 首次配置向导是否已完成（完成后启动直接进主界面）
+    setupDone: raw.OKX_SETUP_DONE === '1',
   };
 }
 

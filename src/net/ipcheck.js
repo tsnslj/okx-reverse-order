@@ -151,9 +151,11 @@ async function detectBoth() {
   const same = direct.ok && proxy.ok && direct.ip === proxy.ip;
   let hint = null;
   if (!proxyOn) {
-    hint = '还没配置代理。大陆网络直连 OKX 会被 DNS 污染，建议在设置里填 http://127.0.0.1:7897';
+    hint =
+      '当前走直连通道，没有用代理。OKX 看到的就是左边这个家宽 IP —— 白名单填它即可。' +
+      '家宽 IP 一般几天才变一次，变了界面会提醒。';
   } else if (same) {
-    hint = '代理出口与直连出口相同，代理可能没生效（检查 Clash 是否运行、端口是否正确）';
+    hint = '代理出口与直连出口相同，代理可能没生效（检查代理软件是否运行、端口是否正确）';
   }
 
   return {

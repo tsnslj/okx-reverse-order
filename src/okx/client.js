@@ -6,6 +6,32 @@ const tls = require('tls');
 const { URL } = require('url');
 const { sign } = require('./sign');
 const env = require('../env');
+const direct = require('../net/direct');
+
+/**
+ * 网络模式
+ *   auto   默认。先走直连通道（免代理、免配置），不通再试代理
+ *   direct 只走直连通道
+ *   proxy  只走代理
+ */
+function networkMode() {
+  const m = String(env.networkMode || 'auto').toLowerCase();
+  return ['auto', 'direct', 'proxy'].includes(m) ? m : 'auto';
+}
+
+/** 断线类错误：换条路/换个 IP 重试有意义 */
+function isTransportError(e) {
+  const c = e && (e.code || '');
+  return (
+    c === 'ECONNRESET' ||
+    c === 'ECONNREFUSED' ||
+    c === 'ETIMEDOUT' ||
+    c === 'EPIPE' ||
+    c === 'ECONNABORTED' ||
+    c === 'EAI_AGAIN' ||
+    /socket hang up/i.test(e && e.message ? e.message : '')
+  );
+}
 
 /** 常见错误码的中文提示，命中时直接说人话 */
 const ERROR_HINTS = {
@@ -16,7 +42,7 @@ const ERROR_HINTS = {
   '50105': 'Passphrase 错误',
   '50106': '缺少 OK-ACCESS-SIGN 请求头',
   '50107': '请求时间戳不在有效期内（本机时间偏差过大）',
-  '50110': 'IP 不在白名单内（去 OKX 更新 API Key 的 IP 地址）',
+  '50110': 'IP 不在白名单内 —— 到 OKX「API」页面把这台电脑当前的出口 IP 加进去（界面上有一键复制）',
   '50111': 'API Key 无效（可能已过期或被删除）',
   '50113': 'IP 不在白名单内（去 OKX 更新 API Key 的 IP 地址）',
   '51000': '参数错误',
@@ -184,22 +210,12 @@ function resetPool() {
 }
 
 /**
- * 发起一个已签名的 OKX 请求
- * @param {string} method
- * @param {string} requestPath 含 query
- * @param {object|null} body   POST 用
- * @param {{simulated?: boolean, timeoutMs?: number}} [options]
+ * 发一次请求（不含重试逻辑）
  */
-async function request(method, requestPath, body = null, options = {}) {
-  const simulated =
-    options.simulated === undefined ? env.simulated : options.simulated;
-  const timeoutMs = options.timeoutMs || 20000;
-
+function sendOnce(method, requestPath, bodyStr, agent, hostname, port, simulated, timeoutMs) {
+  // 时间戳必须在真正发出前生成，重试时要重新签
   const timestamp = new Date().toISOString();
-  const bodyStr = body ? JSON.stringify(body) : '';
   const signature = sign(env.secretKey, timestamp, method, requestPath, bodyStr);
-
-  const url = new URL(env.baseUrl + requestPath);
 
   const headers = {
     'OK-ACCESS-KEY': env.apiKey,
@@ -207,26 +223,22 @@ async function request(method, requestPath, body = null, options = {}) {
     'OK-ACCESS-TIMESTAMP': timestamp,
     'OK-ACCESS-PASSPHRASE': env.passphrase,
     'Content-Type': 'application/json',
+    Accept: 'application/json',
+    Host: hostname,
   };
   if (simulated) headers['x-simulated-trading'] = '1';
   if (bodyStr) headers['Content-Length'] = Buffer.byteLength(bodyStr);
 
-  // 有代理就取复用连接；没代理就直连
-  const agent = currentProxy() ? await getProxyAgent(url.hostname) : null;
-
   return new Promise((resolve, reject) => {
     const reqOptions = {
-      hostname: url.hostname,
-      port: url.port || 443,
-      path: url.pathname + url.search,
+      hostname,
+      port,
+      path: requestPath,
       method: method.toUpperCase(),
       headers,
       timeout: timeoutMs,
     };
-
-    if (agent) {
-      reqOptions.agent = agent;
-    }
+    if (agent) reqOptions.agent = agent;
 
     const req = https.request(reqOptions, (res) => {
       let data = '';
@@ -255,12 +267,89 @@ async function request(method, requestPath, body = null, options = {}) {
       });
     });
 
-    req.on('timeout', () => req.destroy(new Error(`请求超时（${timeoutMs}ms）`)));
+    req.on('timeout', () => {
+      const e = new Error(`请求超时（${timeoutMs}ms）`);
+      e.code = 'ETIMEDOUT';
+      req.destroy(e);
+    });
     req.on('error', (e) => reject(e));
 
     if (bodyStr) req.write(bodyStr);
     req.end();
   });
+}
+
+/**
+ * 发起一个已签名的 OKX 请求
+ *
+ * 路由策略（auto 模式）：先直连，直连失败自动退到代理
+ * 这样既能让没装代理的新用户开箱即用，也兼容已经有代理的老用户
+ *
+ * @param {string} method
+ * @param {string} requestPath 含 query
+ * @param {object|null} body   POST 用
+ * @param {{simulated?: boolean, timeoutMs?: number, mode?: string}} [options]
+ */
+async function request(method, requestPath, body = null, options = {}) {
+  const simulated =
+    options.simulated === undefined ? env.simulated : options.simulated;
+  const timeoutMs = options.timeoutMs || 20000;
+  const bodyStr = body ? JSON.stringify(body) : '';
+
+  const url = new URL(env.baseUrl + requestPath);
+  const hostname = url.hostname;
+  const port = url.port || 443;
+
+  const mode = options.mode || networkMode();
+  const plan =
+    mode === 'proxy' ? ['proxy'] : mode === 'direct' ? ['direct'] : ['direct', 'proxy'];
+
+  let lastErr = null;
+
+  for (const route of plan) {
+    try {
+      let agent;
+      if (route === 'proxy') {
+        if (!currentProxy()) {
+          const e = new Error(
+            '直连通道不通，且没有配置代理。检查本机网络，或在设置里填代理地址。'
+          );
+          e.noRoute = true;
+          throw e;
+        }
+        agent = await getProxyAgent(hostname);
+      } else {
+        agent = await direct.getDirectAgent();
+      }
+      return await sendOnce(
+        method,
+        requestPath,
+        bodyStr,
+        agent,
+        hostname,
+        port,
+        simulated,
+        timeoutMs
+      );
+    } catch (e) {
+      lastErr = e;
+
+      // 只有连接层出错才清掉连接池；业务错误（余额不足、IP 白名单等）
+      // 说明连接本身是好的，销毁它反而让下次请求重新握手
+      const transport = isTransportError(e) || e.noRoute;
+      const serverBusy = e.code === '50001' || e.code === '50004';
+
+      if (transport) {
+        if (route === 'direct') direct.markPoolDead();
+        else resetPool();
+      }
+
+      // 业务错误直接抛，不换路重试
+      if (!transport && !serverBusy) throw e;
+    }
+  }
+
+  throw lastErr || new Error('请求失败：没有可用的网络通道');
 }
 
 const get = (p, o) => request('GET', p, null, o);
@@ -272,6 +361,7 @@ module.exports = {
   post,
   ERROR_HINTS,
   currentProxy,
+  networkMode,
   resetPool,
   createTunnel,
   proxyAgent,
