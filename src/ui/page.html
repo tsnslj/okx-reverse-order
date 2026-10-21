@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>反向开单器 · 控制台</title>
+<style>
+  :root{
+    --bg:#0a0d12; --panel:#11161e; --panel2:#151c26; --line:#212a37;
+    --text:#e8eef7; --muted:#8b98a9; --dim:#5d6b7d;
+    --up:#f6465d; --down:#2ebd85; --accent:#3ddc97; --warn:#ffb020;
+    --mono:"Cascadia Mono","Consolas","SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit}
+  .app{display:flex;min-height:100vh}
+
+  /* ── 侧栏 ── */
+  .side{
+    width:224px;flex:0 0 224px;background:#0c1117;border-right:1px solid var(--line);
+    display:flex;flex-direction:column;padding:22px 14px;position:sticky;top:0;height:100vh;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px 22px}
+  .mark{
+    width:30px;height:30px;border-radius:9px;flex:0 0 30px;
+    background:linear-gradient(135deg,#3ddc97,#1f8f66);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;color:#06140f;font-size:15px;
+  }
+  .brand b{font-size:15px;letter-spacing:.3px}
+  .brand span{display:block;font-size:11px;color:var(--dim);letter-spacing:.6px}
+  nav{display:flex;flex-direction:column;gap:4px}
+  nav button{
+    display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+    padding:10px 12px;border:0;border-radius:9px;background:transparent;
+    color:var(--muted);font-size:13.5px;cursor:pointer;transition:.15s;
+  }
+  nav button:hover{background:#141b24;color:var(--text)}
+  nav button.on{background:#17202b;color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+  nav button.on::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--accent);margin-left:-7px;margin-right:4px}
+  nav button::before{content:"";width:3px;height:14px;margin-left:-7px;margin-right:4px}
+  .sidefoot{margin-top:auto;padding:12px 8px 0;font-size:11px;color:var(--dim);line-height:1.7}
+
+  /* ── 主区 ── */
+  main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:16px 28px;border-bottom:1px solid var(--line);
+    background:rgba(10,13,18,.86);backdrop-filter:blur(10px);position:sticky;top:0;z-index:20;
+  }
+  .statusWrap{display:flex;align-items:center;gap:14px;min-width:0}
+  .dot{width:9px;height:9px;border-radius:50%;background:#3a4553;flex:0 0 9px}
+  .dot.on{background:var(--accent);box-shadow:0 0 0 4px rgba(61,220,151,.13);animation:pulse 2s infinite}
+  .dot.err{background:var(--up);box-shadow:0 0 0 4px rgba(246,70,93,.13)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  #statusText{font-weight:600}
+  #statusSub{color:var(--muted);font-size:12.5px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topActions{display:flex;gap:10px;flex-shrink:0}
+
+  .btn{
+    border:1px solid var(--line);background:var(--panel2);color:var(--text);
+    padding:9px 18px;border-radius:9px;font-size:13.5px;cursor:pointer;transition:.15s;
+    display:inline-flex;align-items:center;gap:7px;
+  }
+  .btn:hover{background:#1b2431;border-color:#2c3848}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.primary{background:linear-gradient(135deg,#3ddc97,#25a97a);color:#04170f;border:0;font-weight:700}
+  .btn.primary:hover{filter:brightness(1.07)}
+  .btn.danger{background:#2a1418;border-color:#4a1f26;color:#ff8b9a;font-weight:600}
+  .btn.danger:hover{background:#371a20}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:6px 12px;font-size:12.5px;border-radius:8px}
+
+  .page{padding:24px 28px 60px;max-width:1180px;width:100%}
+  section[hidden]{display:none}
+
+  .banner{
+    display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-radius:12px;
+    background:linear-gradient(90deg,rgba(255,176,32,.10),rgba(255,176,32,.03));
+    border:1px solid rgba(255,176,32,.28);margin-bottom:20px;
+  }
+  .banner .bi{font-size:18px;line-height:1.2}
+  .banner b{display:block;margin-bottom:3px}
+  .banner p{margin:0;color:#c9b48c;font-size:13px}
+  .banner .btn{margin-left:auto;flex-shrink:0;align-self:center}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:22px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .kpi .k{color:var(--muted);font-size:12px;letter-spacing:.4px;display:flex;align-items:center;gap:6px}
+  .kpi .v{font-size:23px;font-weight:700;margin-top:7px;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+  .kpi .s{color:var(--dim);font-size:11.5px;margin-top:4px}
+  .kpi.wide{grid-column:span 1}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:20px;overflow:hidden}
+  .card > header{
+    display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--line);
+  }
+  .card h3{margin:0;font-size:14px;font-weight:600;letter-spacing:.2px}
+  .card header .sp{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .card .body{padding:18px}
+
+  .iprow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .ipbox{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:15px 16px;position:relative}
+  .ipbox.hl{border-color:rgba(61,220,151,.42);background:linear-gradient(160deg,rgba(61,220,151,.07),var(--panel2))}
+  .ipbox .lb{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:7px}
+  .ipbox .tag{font-size:10.5px;padding:1px 7px;border-radius:20px;background:#1e2a36;color:#89a3bd;letter-spacing:.3px}
+  .ipbox.hl .tag{background:rgba(61,220,151,.16);color:#6ee7b7}
+  .ipbox .ip{font-family:var(--mono);font-size:20px;margin-top:8px;letter-spacing:.4px;word-break:break-all}
+  .ipbox .meta{color:var(--dim);font-size:11.5px;margin-top:5px;min-height:17px}
+  .ipbox .cp{position:absolute;right:12px;top:12px}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{
+    text-align:left;color:var(--dim);font-weight:500;font-size:11.5px;letter-spacing:.5px;
+    padding:9px 12px;border-bottom:1px solid var(--line);text-transform:uppercase;
+  }
+  td{padding:11px 12px;border-bottom:1px solid #1a222d;font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#131a24}
+  .num{font-family:var(--mono)}
+  .up{color:var(--up)} .down{color:var(--down)} .muted{color:var(--muted)} .dim{color:var(--dim)}
+  .empty{padding:34px;text-align:center;color:var(--dim);font-size:13px}
+
+  /* ── 表单 ── */
+  .form{display:grid;gap:16px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:7px}
+  .field label em{font-style:normal;color:var(--dim);font-size:11.5px;margin-left:6px}
+  .field input[type=text],.field input[type=password],.field input[type=number]{
+    width:100%;padding:10px 13px;border-radius:9px;border:1px solid var(--line);
+    background:#0c1219;color:var(--text);font-size:13.5px;font-family:var(--mono);outline:none;transition:.15s;
+  }
+  .field input:focus{border-color:#2f7f63;box-shadow:0 0 0 3px rgba(61,220,151,.10)}
+  .field input::placeholder{color:#48566a;font-family:inherit}
+  .hint{color:var(--dim);font-size:11.5px;margin-top:6px;line-height:1.6}
+  .switch{display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
+  .switch input{display:none}
+  .track{width:42px;height:23px;border-radius:20px;background:#26303d;position:relative;transition:.2s;flex:0 0 42px}
+  .track::after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;background:#7b8798;top:3px;left:3px;transition:.2s}
+  .switch input:checked + .track{background:rgba(246,70,93,.35)}
+  .switch input:checked + .track::after{left:22px;background:var(--up)}
+  .formActions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .msg{font-size:12.5px;padding:9px 13px;border-radius:8px;display:none}
+  .msg.show{display:block}
+  .msg.ok{background:rgba(61,220,151,.10);color:#6ee7b7;border:1px solid rgba(61,220,151,.28)}
+  .msg.err{background:rgba(246,70,93,.10);color:#ff9aa8;border:1px solid rgba(246,70,93,.28)}
+  code.inline{font-family:var(--mono);background:#0c1219;padding:2px 6px;border-radius:5px;font-size:12px;color:#9db3c9}
+
+  /* ── 日志 ── */
+  .logbar{display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+  .logwrap{
+    background:#070a0e;border:1px solid var(--line);border-radius:12px;
+    height:calc(100vh - 250px);min-height:340px;overflow:auto;padding:14px 16px;
+  }
+  pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre-wrap;word-break:break-all;color:#a9b8c9}
+  pre .l-ok{color:#6ee7b7} pre .l-err{color:#ff9aa8} pre .l-warn{color:#ffcf7a}
+  pre .l-dim{color:#5d6b7d} pre .l-key{color:#7dd3fc}
+  .chk{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12.5px;cursor:pointer;user-select:none}
+  .chk input{accent-color:var(--accent)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#242e3c;border-radius:6px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  @media (max-width:880px){
+    .side{display:none}
+    .page{padding:18px 16px 50px}
+    .topbar{padding:14px 16px}
+    .iprow,.row2{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="mark">↺</div>
+      <div><b>反向开单器</b><span>OKX · 本地控制台</span></div>
+    </div>
+    <nav>
+      <button data-tab="overview" class="on">总览</button>
+      <button data-tab="settings">设置</button>
+      <button data-tab="logs">运行日志</button>
+    </nav>
+    <div class="sidefoot">
+      引擎在你的电脑上运行<br />
+      凭证只存在本地 .env
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div class="statusWrap">
+        <span class="dot" id="dot"></span>
+        <div style="min-width:0">
+          <div id="statusText">已停止</div>
+          <div id="statusSub">反手引擎未运行</div>
+        </div>
+      </div>
+      <div class="topActions">
+        <button class="btn primary" id="btnStart">启动反手</button>
+        <button class="btn danger" id="btnStop" disabled>停止</button>
+      </div>
+    </div>
+
+    <!-- ══════════ 总览 ══════════ -->
+    <section class="page" id="tab-overview">
+      <div class="banner" id="setupBanner" style="display:none">
+        <div class="bi">⚙</div>
+        <div>
+          <b>还差最后一步：填 API 凭证</b>
+          <p>去 OKX 创建一把只带「读取 + 交易」权限的 Key，填进设置里就能启动。</p>
+        </div>
+        <button class="btn sm" onclick="go('settings')">去设置</button>
+      </div>
+
+      <div class="grid">
+        <div class="kpi">
+          <div class="k">持仓模式</div>
+          <div class="v" id="kMode">—</div>
+          <div class="s" id="kModeSub">读取中</div>
+        </div>
+        <div class="kpi">
+          <div class="k">总权益</div>
+          <div class="v" id="kEq">—</div>
+          <div class="s">USDT</div>
+        </div>
+        <div class="kpi">
+          <div class="k">可用</div>
+          <div class="v" id="kAvail">—</div>
+          <div class="s">USDT</div>
+        </div>
+        <div class="kpi">
+          <div class="k">今日反手</div>
+          <div class="v" id="kToday">—</div>
+          <div class="s">次</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header>
+          <h3>网络出口</h3>
+          <div class="sp">
+            <button class="btn sm ghost" id="btnIp">重新检测</button>
+          </div>
+        </header>
+        <div class="body">
+          <div class="iprow">
+            <div class="ipbox">
+              <div class="lb">直连出口 <span class="tag">家用宽带</span></div>
+              <div class="ip" id="ipDirect">—</div>
+              <div class="meta" id="ipDirectMeta">检测中…</div>
+            </div>
+            <div class="ipbox hl">
+              <div class="lb">代理出口 <span class="tag">OKX 看到的</span></div>
+              <div class="ip" id="ipProxy">—</div>
+              <div class="meta" id="ipProxyMeta">检测中…</div>
+              <button class="btn sm cp" id="btnCopyIp" title="复制">复制</button>
+            </div>
+          </div>
+          <div class="hint" id="ipHint" style="margin-top:14px">
+            白名单要填的是右边这个地址：代理节点一变，它就变。所以在 Clash 里锁定一个节点，别用「自动选择」。
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header><h3>当前持仓</h3><div class="sp"><span class="dim" id="posCount"></span></div></header>
+        <div id="posWrap"><div class="empty">读取中…</div></div>
+      </div>
+
+      <div class="card">
+        <header><h3>当前挂单</h3><div class="sp"><span class="dim" id="pendCount"></span></div></header>
+        <div id="pendWrap"><div class="empty">读取中…</div></div>
+      </div>
+    </section>
+
+    <!-- ══════════ 设置 ══════════ -->
+    <section class="page" id="tab-settings" hidden>
+      <div class="card">
+        <header><h3>API 凭证</h3></header>
+        <div class="body form">
+          <div class="field">
+            <label>API Key</label>
+            <input type="text" id="fApiKey" placeholder="例如 a521867c-895b-4df5-bbf5-..." autocomplete="off" spellcheck="false" />
+            <div class="hint" id="hApiKey">已保存的 Key 不会回显，留空表示不修改。</div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label>Secret Key</label>
+              <input type="password" id="fSecret" placeholder="留空则不修改" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label>Passphrase</label>
+              <input type="password" id="fPass" placeholder="留空则不修改" autocomplete="off" />
+              <div class="hint">创建 Key 时你自己设的密码，OKX 后台查不到，忘了只能重建 Key。</div>
+            </div>
+          </div>
+          <div class="field">
+            <label>代理地址 <em>大陆网络必填</em></label>
+            <input type="text" id="fProxy" placeholder="http://127.0.0.1:7897" spellcheck="false" />
+            <div class="hint">Clash Verge 默认 7897，Clash for Windows 常见 7890。填错会连不上 OKX。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header><h3>交易参数</h3></header>
+        <div class="body form">
+          <div class="row2">
+            <div class="field">
+              <label>AI Builder 归因码 <em>可选</em></label>
+              <input type="text" id="fBuilder" placeholder="1-16 位字母数字" spellcheck="false" />
+              <div class="hint">填了之后每笔下单自动带上 tag，OKX 才会统计返佣。</div>
+            </div>
+            <div class="field">
+              <label>轮询间隔（毫秒）</label>
+              <input type="number" id="fInterval" value="1500" min="500" step="100" />
+              <div class="hint">越小越快，但也越费请求。1500 大约 2 秒发现新单。</div>
+            </div>
+          </div>
+          <div class="field">
+            <label>只监听这些合约 <em>可留空</em></label>
+            <input type="text" id="fInst" placeholder="留空 = 全部 U 本位永续，例如 ETH-USDT-SWAP,DOGE-USDT-SWAP" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label class="switch">
+              <input type="checkbox" id="fLive" checked />
+              <span class="track"></span>
+              <span>实盘执行</span>
+            </label>
+            <div class="hint" id="hLive">关上就是演练模式：照常检测、照常算反向单，但不会真下单。</div>
+          </div>
+          <div class="formActions">
+            <button class="btn primary" id="btnSave">保存配置</button>
+            <button class="btn" id="btnTest">测试连接</button>
+            <span class="msg" id="saveMsg"></span>
+          </div>
+          <div class="hint" id="envPath"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ 日志 ══════════ -->
+    <section class="page" id="tab-logs" hidden>
+      <div class="logbar">
+        <label class="chk"><input type="checkbox" id="autoScroll" checked /> 自动滚到底部</label>
+        <button class="btn sm ghost" id="btnClear">清空显示</button>
+        <span class="dim" id="logCount"></span>
+      </div>
+      <div class="logwrap" id="logWrap"><pre id="log"></pre></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const S = {
+  engine: { running: false },
+  config: {},
+  ip: null,
+  live: true,
+  interval: 1500,
+  instIds: null,
+  tab: 'overview',
+  logs: [],
+};
+
+/* ── 通用请求 ── */
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
+  const t = await r.text();
+  try { return JSON.parse(t); } catch { return { ok: false, error: t }; }
+}
+
+/* ── 标签切换 ── */
+function go(tab) {
+  S.tab = tab;
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  ['overview', 'settings', 'logs'].forEach((t) => { $('#tab-' + t).hidden = t !== tab; });
+  if (tab === 'overview') refreshAccount();
+  if (tab === 'logs') scrollLog(true);
+}
+document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => go(b.dataset.tab)));
+
+/* ── 顶部状态 ── */
+function renderEngine(st) {
+  if (st) S.engine = st;
+  const e = S.engine;
+  const dot = $('#dot');
+  dot.className = 'dot' + (e.running ? ' on' : '');
+  $('#statusText').textContent = e.running ? '反手引擎运行中' : '已停止';
+  if (e.running) {
+    const mode = e.args && e.args.live === false ? '演练' : '实盘';
+    $('#statusSub').textContent = `${mode} · PID ${e.pid} · 已运行 ${fmtDur(e.uptimeSec || 0)}`;
+  } else {
+    $('#statusSub').textContent = '反手引擎未运行，你下的单不会被处理';
+  }
+  $('#btnStart').disabled = !!e.running;
+  $('#btnStop').disabled = !e.running;
+
+  // 顶部按钮的语义随状态变化：运行中就把「启动」变成「已在运行」
+  $('#btnStart').textContent = e.running ? '运行中' : (S.live ? '启动反手' : '启动演练');
+}
+
+function fmtDur(s) {
+  if (s < 60) return s + ' 秒';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + ' 分钟 ' + (s % 60) + ' 秒';
+  return Math.floor(m / 60) + ' 小时 ' + (m % 60) + ' 分';
+}
+
+/* ── 日志 ── */
+function paintLine(line) {
+  const esc = line.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  let cls = '';
+  if (/✗|失败|错误|异常|50110|停机/.test(line)) cls = 'l-err';
+  else if (/✓|反手完成|已翻转/.test(line)) cls = 'l-ok';
+  else if (/⚠|放行|跳过|拦截/.test(line)) cls = 'l-warn';
+  else if (/────|════/.test(line)) cls = 'l-dim';
+  else if (/🔔|发现新订单/.test(line)) cls = 'l-key';
+  return cls ? `<span class="${cls}">${esc}</span>` : esc;
+}
+function addLog(line) {
+  if (S.logs.length > 1200) S.logs.shift();
+  S.logs.push(line);
+  const pre = $('#log');
+  pre.insertAdjacentHTML('beforeend', paintLine(line) + '\n');
+  $('#logCount').textContent = S.logs.length + ' 行';
+  if ($('#autoScroll').checked) scrollLog();
+}
+function scrollLog(force) {
+  const w = $('#logWrap');
+  if (force || $('#autoScroll').checked) w.scrollTop = w.scrollHeight;
+}
+$('#btnClear').addEventListener('click', () => {
+  S.logs = []; $('#log').innerHTML = ''; $('#logCount').textContent = '0 行';
+});
+
+/* ── 账户 ── */
+function fmt(n, d = 2) {
+  if (n === null || n === undefined || n === '') return '—';
+  const x = Number(n);
+  if (!isFinite(x)) return '—';
+  return x.toLocaleString('zh-CN', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function pnlClass(v) {
+  const x = Number(v);
+  if (!isFinite(x) || x === 0) return 'muted';
+  return x > 0 ? 'up' : 'down'; // 中文习惯：红涨绿跌
+}
+
+async function refreshAccount() {
+  const a = await api('/api/account');
+  if (!a.configured) {
+    $('#kMode').textContent = '—'; $('#kModeSub').textContent = '未配置凭证';
+    $('#kEq').textContent = '—'; $('#kAvail').textContent = '—';
+    $('#kToday').textContent = '—';
+    $('#posWrap').innerHTML = '<div class="empty">还没有配置 API 凭证</div>';
+    $('#pendWrap').innerHTML = '<div class="empty">—</div>';
+    $('#setupBanner').style.display = 'flex';
+    return;
+  }
+  $('#setupBanner').style.display = 'none';
+
+  if (a.ok === false) {
+    $('#kMode').textContent = '连接失败';
+    $('#kModeSub').textContent = a.error.slice(0, 40);
+    $('#posWrap').innerHTML = `<div class="empty">${escapeHtml(a.error)}</div>`;
+    $('#pendWrap').innerHTML = '<div class="empty">—</div>';
+    return;
+  }
+
+  const netMode = a.posMode === 'net_mode';
+  $('#kMode').textContent = netMode ? '买卖模式' : '开平仓模式';
+  $('#kMode').textContent = '';
+  $('#kMode').innerHTML = `<span style="font-size:18px">${netMode ? '买卖模式' : '开平仓模式'}</span>`;
+  $('#kModeSub').textContent = netMode ? '净持仓 · 反向 = 翻仓' : '双向持仓 · 反向 = 锁仓';
+  $('#kEq').textContent = fmt(a.totalEq);
+  $('#kAvail').textContent = fmt(a.availBal);
+  $('#kToday').textContent = a.todayCount != null ? a.todayCount : '0';
+
+  // 持仓表
+  const pw = $('#posWrap');
+  if (!a.positions || a.positions.length === 0) {
+    pw.innerHTML = '<div class="empty">当前没有持仓</div>';
+    $('#posCount').textContent = '';
+  } else {
+    const rows = a.positions.map((p) => {
+      const qty = Number(p.pos);
+      return `<tr>
+        <td><b>${escapeHtml(p.instId)}</b></td>
+        <td class="num ${qty > 0 ? 'up' : 'down'}">${qty > 0 ? '多' : '空'} ${Math.abs(qty)}</td>
+        <td class="num">${fmt(p.avgPx, 4)}</td>
+        <td class="num ${pnlClass(p.upl)}">${Number(p.upl) >= 0 ? '+' : ''}${fmt(p.upl)}</td>
+        <td class="num ${pnlClass(p.upl)}">${fmt(Number(p.uplRatio) * 100)}%</td>
+        <td class="num dim">${p.liqPx && Number(p.liqPx) > 0 ? fmt(p.liqPx, 4) : '—'}</td>
+        <td class="num dim">${p.lever ? p.lever + 'x' : '—'}</td>
+      </tr>`;
+    }).join('');
+    pw.innerHTML = `<table><thead><tr>
+      <th>合约</th><th>方向 / 张数</th><th>均价</th><th>浮盈</th><th>收益率</th><th>强平价</th><th>杠杆</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+    $('#posCount').textContent = a.positions.length + ' 个持仓';
+  }
+
+  // 挂单表
+  const dw = $('#pendWrap');
+  if (!a.pending || a.pending.length === 0) {
+    dw.innerHTML = '<div class="empty">当前没有挂单</div>';
+    $('#pendCount').textContent = '';
+  } else {
+    const rows = a.pending.map((o) => `<tr>
+      <td><b>${escapeHtml(o.instId)}</b></td>
+      <td class="num ${o.side === 'buy' ? 'up' : 'down'}">${o.side === 'buy' ? '买入' : '卖出'}</td>
+      <td class="num">${o.sz} 张</td>
+      <td class="num">${o.ordType === 'market' ? '市价' : fmt(o.px, 4)}</td>
+      <td class="num dim">${escapeHtml(o.ordType)}</td>
+    </tr>`).join('');
+    dw.innerHTML = `<table><thead><tr><th>合约</th><th>方向</th><th>数量</th><th>价格</th><th>类型</th></tr></thead><tbody>${rows}</tbody></table>`;
+    $('#pendCount').textContent = a.pending.length + ' 张挂单';
+  }
+}
+
+/* ── IP ── */
+async function refreshIp() {
+  $('#ipDirect').textContent = '…'; $('#ipProxy').textContent = '…';
+  $('#ipDirectMeta').textContent = '检测中';
+  $('#ipProxyMeta').textContent = '检测中';
+  const r = await api('/api/ip');
+  S.ip = r;
+
+  if (r.direct && r.direct.ok) {
+    $('#ipDirect').textContent = r.direct.ip;
+    $('#ipDirectMeta').textContent = '来源 ' + r.direct.source;
+  } else {
+    $('#ipDirect').textContent = '检测失败';
+    $('#ipDirectMeta').textContent = (r.direct && r.direct.error) || '';
+  }
+
+  if (r.proxy && r.proxy.ok) {
+    $('#ipProxy').textContent = r.proxy.ip;
+    $('#ipProxyMeta').textContent = '来源 ' + r.proxy.source + ' · 这个填进白名单';
+    $('#btnCopyIp').disabled = false;
+  } else {
+    $('#ipProxy').textContent = '未生效';
+    $('#ipProxyMeta').textContent = (r.proxy && r.proxy.error) || '代理未配置';
+    $('#btnCopyIp').disabled = true;
+  }
+
+  $('#ipHint').innerHTML = r.hint
+    ? `<span style="color:var(--warn)">⚠ ${escapeHtml(r.hint)}</span>`
+    : '白名单要填的是右边这个地址：代理节点一变，它就变。所以在 Clash 里锁定一个节点，别用「自动选择」。';
+}
+$('#btnIp').addEventListener('click', refreshIp);
+$('#btnCopyIp').addEventListener('click', async () => {
+  const v = $('#ipProxy').textContent;
+  if (!v || v === '—') return;
+  try {
+    await navigator.clipboard.writeText(v);
+    const b = $('#btnCopyIp'); const old = b.textContent;
+    b.textContent = '已复制'; setTimeout(() => (b.textContent = old), 1200);
+  } catch { /* 浏览器不允许剪贴板时忽略 */ }
+});
+
+/* ── 保存 / 测试 ── */
+function flash(kind, text) {
+  const m = $('#saveMsg');
+  m.className = 'msg show ' + kind;
+  m.textContent = text;
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => { m.className = 'msg'; }, 6000);
+}
+
+$('#btnSave').addEventListener('click', async () => {
+  const body = {
+    apiKey: $('#fApiKey').value.trim(),
+    secretKey: $('#fSecret').value,
+    passphrase: $('#fPass').value,
+    proxy: $('#fProxy').value.trim(),
+    builderCode: $('#fBuilder').value.trim(),
+  };
+  const r = await api('/api/config', { method: 'POST', body: JSON.stringify(body) });
+  if (!r.ok) return flash('err', r.error || '保存失败');
+
+  $('#fSecret').value = ''; $('#fPass').value = ''; $('#fApiKey').value = '';
+  S.config = r.config;
+  applyConfig(r.config);
+  flash('ok', '已保存，配置立即生效');
+  refreshAccount();
+});
+
+$('#btnTest').addEventListener('click', async () => {
+  const b = $('#btnTest');
+  b.disabled = true; b.textContent = '连接中…';
+  const r = await api('/api/test', { method: 'POST' });
+  b.disabled = false; b.textContent = '测试连接';
+  if (r.ok) {
+    flash('ok', `连接成功 · UID ${r.uid} · ${r.acctLv === '2' ? '合约模式' : '模式 ' + r.acctLv} · ${r.ms}ms`);
+  } else {
+    flash('err', r.error || '连接失败');
+  }
+});
+
+function applyConfig(c) {
+  S.config = c;
+  $('#fProxy').value = c.proxy || '';
+  $('#fBuilder').value = c.builderCode || '';
+  $('#envPath').textContent = '配置文件：' + c.envFile;
+  $('#hApiKey').textContent = c.hasApiKey
+    ? `已保存：${c.apiKeyMasked}（留空表示不修改）`
+    : '还没填。OKX → 账户 → API，权限只勾「读取 + 交易」。';
+  $('#setupBanner').style.display = c.missing && c.missing.length ? 'flex' : 'none';
+}
+
+/* ── 启停 ── */
+$('#btnStart').addEventListener('click', async () => {
+  const inst = $('#fInst').value.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+  S.interval = Number($('#fInterval').value) || 1500;
+  S.live = $('#fLive').checked;
+
+  if (S.live) {
+    const ok = confirm(
+      '即将以【实盘】模式启动。\n\n' +
+      '启动后，你在 OKX 上的任何一笔增仓单都会在几秒内被真实反手（平仓单放行）。\n' +
+      '这项操作会真实改变持仓，产生手续费。\n\n确定启动？'
+    );
+    if (!ok) return;
+  }
+
+  const r = await api('/api/engine/start', {
+    method: 'POST',
+    body: JSON.stringify({ live: S.live, interval: S.interval, instIds: inst.length ? inst : null }),
+  });
+  if (!r.ok) {
+    // 缺凭证时直接把人带到设置页
+    if (/凭证|缺少|缺 /.test(r.error || '')) { go('settings'); }
+    return alert(r.error || '启动失败');
+  }
+  renderEngine({ running: true, pid: r.pid, startedAt: Date.now(), uptimeSec: 0, args: { live: S.live } });
+  go('logs');
+});
+
+$('#btnStop').addEventListener('click', async () => {
+  if (!confirm('停止反手引擎？停止后你下的单不会再被处理。')) return;
+  const r = await api('/api/engine/stop', { method: 'POST' });
+  if (!r.ok) alert(r.error || '停止失败');
+});
+
+$('#fLive').addEventListener('change', (e) => {
+  S.live = e.target.checked;
+  $('#hLive').textContent = S.live
+    ? '实盘模式：检测到新单会真实下单反手。'
+    : '关上就是演练模式：照常检测、照常算反向单，但不会真下单。';
+  renderEngine();
+});
+
+/* ── SSE ── */
+function connectEvents() {
+  const es = new EventSource('/api/events');
+  es.addEventListener('log', (ev) => {
+    try { addLog(JSON.parse(ev.data).line); } catch {}
+  });
+  es.addEventListener('state', (ev) => {
+    try { renderEngine(JSON.parse(ev.data)); } catch {}
+  });
+  es.onerror = () => { /* EventSource 会自己重连 */ };
+}
+$('#autoScroll').addEventListener('change', () => scrollLog(true));
+
+/* ── 启动引导 ── */
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+(async function init() {
+  const b = await api('/api/bootstrap');
+  applyConfig(b.config);
+  renderEngine(b.engine);
+  (b.logs || []).forEach(addLog);
+  if (b.config.missing && b.config.missing.length) go('settings');
+  else refreshAccount();
+  refreshIp();
+  connectEvents();
+
+  setInterval(() => {
+    if (S.engine.running) {
+      S.engine.uptimeSec = (S.engine.uptimeSec || 0) + 1;
+      renderEngine();
+    }
+  }, 1000);
+
+  setInterval(() => {
+    if (S.tab === 'overview' && document.visibilityState === 'visible') refreshAccount();
+  }, 10000);
+})();
+</script>
+</body>
+</html>

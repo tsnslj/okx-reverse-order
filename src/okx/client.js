@@ -31,29 +31,44 @@ const ERROR_HINTS = {
   '51603': '查询的订单不存在',
 };
 
-const proxyCfg = (() => {
-  if (!env.proxy) return null;
-  try {
-    const u = new URL(env.proxy);
-    return {
-      host: u.hostname,
-      port: Number(u.port || (u.protocol === 'https:' ? 443 : 80)),
-      auth:
-        u.username
-          ? 'Basic ' +
-            Buffer.from(
-              `${decodeURIComponent(u.username)}:${decodeURIComponent(u.password || '')}`
-            ).toString('base64')
-          : null,
-    };
-  } catch {
-    return null;
+/**
+ * 代理配置惰性读取 —— 图形界面里改了代理地址后无需重启服务
+ * 每次读 env.proxy，值与缓存不同才重新解析
+ */
+let proxyCache = { raw: null, cfg: null };
+
+function currentProxy() {
+  const raw = env.proxy || '';
+  if (proxyCache.raw === raw) return proxyCache.cfg;
+
+  let cfg = null;
+  if (raw) {
+    try {
+      const u = new URL(raw);
+      cfg = {
+        host: u.hostname,
+        port: Number(u.port || (u.protocol === 'https:' ? 443 : 80)),
+        auth:
+          u.username
+            ? 'Basic ' +
+              Buffer.from(
+                `${decodeURIComponent(u.username)}:${decodeURIComponent(u.password || '')}`
+              ).toString('base64')
+            : null,
+      };
+    } catch {
+      cfg = null;
+    }
   }
-})();
+  proxyCache = { raw, cfg };
+  return cfg;
+}
 
 /** 通过 HTTP 代理建立 CONNECT 隧道，返回裸 socket */
 function createTunnel(targetHost, targetPort) {
+  const proxyCfg = currentProxy();
   return new Promise((resolve, reject) => {
+    if (!proxyCfg) return reject(new Error('未配置代理地址'));
     const socket = net.connect({
       host: proxyCfg.host,
       port: proxyCfg.port,
@@ -192,7 +207,7 @@ async function request(method, requestPath, body = null, options = {}) {
   if (bodyStr) headers['Content-Length'] = Buffer.byteLength(bodyStr);
 
   // 有代理就取复用连接；没代理就直连
-  const agent = proxyCfg ? await getProxyAgent(url.hostname) : null;
+  const agent = currentProxy() ? await getProxyAgent(url.hostname) : null;
 
   return new Promise((resolve, reject) => {
     const reqOptions = {
@@ -246,4 +261,17 @@ async function request(method, requestPath, body = null, options = {}) {
 const get = (p, o) => request('GET', p, null, o);
 const post = (p, b, o) => request('POST', p, b, o);
 
-module.exports = { request, get, post, ERROR_HINTS, proxyCfg, resetPool };
+module.exports = {
+  request,
+  get,
+  post,
+  ERROR_HINTS,
+  currentProxy,
+  resetPool,
+  createTunnel,
+  proxyAgent,
+  /** 兼容旧调用：读一次当前代理配置 */
+  get proxyCfg() {
+    return currentProxy();
+  },
+};

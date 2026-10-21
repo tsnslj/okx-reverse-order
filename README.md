@@ -106,6 +106,31 @@ OKX 有两种持仓模式，反向的含义完全不同：
 
 ## 快速开始
 
+### 方式一：图形界面（推荐）
+
+Windows 下双击 **`启动.bat`**，浏览器会自动打开控制台：
+
+```
+http://127.0.0.1:8787
+```
+
+界面里能完成全部操作，不用碰命令行、不用手动编辑 `.env`：
+
+| 页面 | 能做什么 |
+| --- | --- |
+| 总览 | 持仓模式、总权益、可用余额、今日反手次数、当前持仓与挂单 |
+| 总览 | **网络出口**：同时显示「直连 IP」和「代理出口 IP」，后者就是要填进白名单的地址，一键复制 |
+| 设置 | 填 API Key / Secret / Passphrase / 代理 / Builder Code，保存即生效 |
+| 设置 | 「测试连接」直接告出 UID 与持仓模式，不用跑命令 |
+| 日志 | 引擎的实时输出，和命令行窗口里一模一样 |
+
+启动/停止引擎都在顶部按钮上。实盘启动前会弹一次确认。
+
+> 界面的服务只监听 `127.0.0.1`，不对外暴露；凭证仍只存在本地 `.env`。
+> 关掉那个黑色命令行窗口，界面和引擎一起停。
+
+### 方式二：命令行
+
 ```bash
 # 1. 克隆
 git clone https://github.com/tsnslj/okx-reverse-order.git
@@ -125,7 +150,7 @@ node src/start.js
 node src/start.js --live
 ```
 
-Windows 下可直接双击 `start-live.bat`。
+Windows 下也可双击 `start-live.bat` 直接启动引擎（无界面）。
 
 ### 第一次运行会看到什么
 
@@ -206,14 +231,20 @@ UID            : 1234567890
 
 ```
 src/
-  env.js            配置加载
-  start.js          常开监听主程序
+  env.js            配置加载与保存（界面改配置即时生效）
+  start.js          常开监听主程序（引擎）
   okx/
     sign.js         HMAC-SHA256 签名
     client.js       HTTP 客户端（含 CONNECT 隧道代理、连接复用）
     account.js      账户与持仓
     trade.js        下单 / 撤单 / 平仓（自动注入 Builder tag）
     market.js       合约面值与行情
+  net/
+    ipcheck.js      直连 / 代理双路出口 IP 探测
+  ui/
+    server.js       本地控制台服务（只监听 127.0.0.1）
+    page.html       单页界面，零外部依赖
+    engine.js       引擎子进程管理（日志回流、启停）
   core/
     watcher.js      轮询差量监听
     reverse.js      反手状态机
@@ -222,6 +253,8 @@ scripts/
   p0-check.js       只读体检
   reverse-one.js    单笔手动反手
   dev-test-guard.js 错误处理自测（桩替换，不发真实请求）
+启动.bat            双击进入图形界面
+start-live.bat      双击只启动引擎（无界面）
 ```
 
 ---
@@ -270,6 +303,7 @@ scripts/
   需要更低延迟需改用私有 WebSocket `orders` 频道，当前版本尚未实现。
 - 仅支持 U 本位永续合约，现货与币本位未适配。
 - 不处理部分成交后的剩余挂单与成交量的复杂组合场景。
+- 图形界面需要在 Windows 上安装 Node.js 18+（`启动.bat` 会自动检查并提示下载地址）。
 
 ---
 
