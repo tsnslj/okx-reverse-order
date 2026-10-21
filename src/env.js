@@ -48,9 +48,36 @@ const config = {
 
 const missing = ['apiKey', 'secretKey', 'passphrase'].filter((k) => !config[k]);
 if (missing.length > 0) {
-  throw new Error(
-    `缺少凭证: ${missing.join(', ')}。请检查 ${ENV_FILE}`
-  );
+  const line = '═'.repeat(56);
+  console.error(`
+${line}
+  还没有配置 OKX API 凭证
+${line}
+
+  缺少：${missing.join(', ')}
+
+  第 1 步  创建 API Key
+           打开 https://www.okx.com/account/my-api
+           权限只勾「读取」+「交易」，绝对不要勾「提币」
+           务必填写 IP 白名单，否则带交易权限的 Key 会在 14 天后自动失效
+
+  第 2 步  把配置模板复制一份
+           PowerShell : Copy-Item .env.example .env
+           macOS/Linux: cp .env.example .env
+
+  第 3 步  用文本编辑器打开 .env，填这三行
+           OKX_API_KEY=你的 Key
+           OKX_SECRET_KEY=你的 Secret
+           OKX_PASSPHRASE=创建 Key 时你自己设的密码（OKX 后台查不到）
+
+  配置文件位置：
+  ${ENV_FILE}
+
+  填写完成后再运行一次。建议先跑只读体检：
+  node scripts/p0-check.js --live
+${line}
+`);
+  process.exit(1);
 }
 
 module.exports = config;
