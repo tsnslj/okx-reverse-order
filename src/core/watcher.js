@@ -1,6 +1,7 @@
 'use strict';
 
 const { getOrdersPending, getOrdersHistory } = require('../okx/trade');
+const { getConfig } = require('../okx/account');
 const { reverseOrder, log } = require('./reverse');
 const guard = require('./guard');
 
@@ -81,13 +82,19 @@ class OrderWatcher {
 
   /** 启动时把存量订单全部标记为已知 */
   async prime() {
-    const [pending, history] = await Promise.all([
+    const [pending, history, cfg] = await Promise.all([
       getOrdersPending({ instType: 'SWAP' }, this.opts),
       getOrdersHistory({ instType: 'SWAP', limit: 50 }, this.opts),
+      getConfig(this.opts),
     ]);
     for (const o of [...pending, ...history]) {
       this.known.add(o.ordId);
     }
+
+    // 持仓模式决定反手怎么做，启动时定下来，后面全程按它走
+    this.posMode = cfg.posMode;
+    this.emit('mode', { posMode: cfg.posMode, isHedge: cfg.isLongShort });
+    log(`持仓模式：${cfg.posMode}${cfg.isLongShort ? '（双向持仓，多空分账）' : '（净持仓）'}`);
     log(`已加载存量订单 ${this.known.size} 张（这些不会被反手）`);
   }
 
@@ -143,6 +150,7 @@ class OrderWatcher {
           ordId: o.ordId,
           limits: this.limits,
           dryRun: this.dryRun,
+          posMode: this.posMode || 'net_mode',
           opts: this.opts,
         });
 

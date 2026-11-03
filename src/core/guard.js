@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const position = require('./position');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const COUNTER_FILE = path.join(DATA_DIR, 'counter.json');
@@ -118,18 +119,34 @@ function checkNotional(sz, price, ctVal, limits = DEFAULT_LIMITS) {
 /**
  * 判断一张订单属于「增仓」还是「减仓」
  *
- * 关键：必须用「成交前的持仓」判断，而不是「当前持仓」。
- * 因为轮询有 1.5s+ 延迟，监听到订单时它通常已经成交，当前持仓已是成交后的状态。
- * 反推公式：成交前持仓 = 当前净持仓 - 本单成交量（买为正、卖为负）
+ * 分两种持仓模式，判断方式完全不同：
+ *
+ * long_short_mode（双向持仓）
+ *   多空分账，订单自带 posSide。不用推断，看组合即可：
+ *     sell + long  → 平多
+ *     buy  + short → 平空
+ *   其余都是开仓。这里如果沿用「靠 pos 正负推断」的老逻辑会直接判反 ——
+ *   因为空单的 pos 也是正数。
+ *
+ * net_mode（买卖模式）
+ *   只有一个净持仓，必须用「成交前的持仓」判断，不能用当前持仓：
+ *   轮询有 1.5s+ 延迟，监听到订单时它通常已经成交。
+ *   反推公式：成交前持仓 = 当前净持仓 - 本单成交量（买为正、卖为负）
  *
  * 例：持多 0.11，卖出 0.11 平仓 → 读到当前持仓 0，成交量 0.11
  *     → 成交前 = 0 - (-0.11) = 0.11 > 0，方向相反 → 判定为减仓，放行 ✓
  *
- * @param {{side:'buy'|'sell'}} order
+ * @param {{side:'buy'|'sell', posSide?:string}} order
  * @param {number} netPosNow 当前净持仓（正=多，负=空）
  * @param {number|string} [filled] 本单已成交量
+ * @param {string} [posMode] net_mode | long_short_mode
  */
-function isReducingOrder(order, netPosNow, filled = 0) {
+function isReducingOrder(order, netPosNow, filled = 0, posMode = 'net_mode') {
+  // 双向持仓：有 posSide 就直接判定，零推断
+  const bySide = position.isReducingByPosSide(order, posMode);
+  if (bySide !== null) return bySide;
+
+  // 净持仓：反推成交前持仓
   const fill = Math.abs(Number(filled) || 0);
   const signedFill = order.side === 'buy' ? fill : -fill;
   const posBefore = (Number(netPosNow) || 0) - signedFill;

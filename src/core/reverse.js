@@ -7,6 +7,7 @@ const { getPositions } = require('../okx/account');
 const { getOrder, cancelOrder, placeOrder } = require('../okx/trade');
 const { getInstrument } = require('../okx/market');
 const guard = require('./guard');
+const position = require('./position');
 
 const LOG_DIR = path.join(__dirname, '..', '..', 'logs');
 
@@ -51,7 +52,7 @@ async function waitFinalState({ instId, ordId }, maxTries = 6, gapMs = 400, opts
  * @param {boolean} [p.dryRun]  true 时只算不下单
  * @param {object} [p.opts]     透传给 client（如 {simulated:true}）
  */
-async function reverseOrder({ instId, ordId, clOrdId, limits = guard.DEFAULT_LIMITS, dryRun = false, opts = {} }) {
+async function reverseOrder({ instId, ordId, clOrdId, limits = guard.DEFAULT_LIMITS, dryRun = false, posMode = 'net_mode', opts = {} }) {
   const startedAt = Date.now();
 
   // ── 1. 取订单 ─────────────────────────────
@@ -85,9 +86,11 @@ async function reverseOrder({ instId, ordId, clOrdId, limits = guard.DEFAULT_LIM
   try {
     // ── 3. 当前持仓（决定是否放行平仓单） ──
     const positions = await getPositions({ instType: 'SWAP', instId }, opts);
-    const posItem = positions.find((p) => p.instId === instId);
-    const netPos = posItem ? Number(posItem.pos) : 0;
+    // 双向持仓下不能直接读 pos：它永远是正数，空单会被当成多单
+    const netPos = position.signedNet(positions, instId, posMode);
     trace.netPosAfter = netPos;
+    trace.posMode = posMode;
+    trace.orderPosSide = position.orderPosSide(order);
 
     // 轮询有延迟，读到的是「成交后」持仓；反推成交前持仓再判断是否减仓
     const filledNow = Math.abs(Number(order.accFillSz || 0));
@@ -96,7 +99,7 @@ async function reverseOrder({ instId, ordId, clOrdId, limits = guard.DEFAULT_LIM
     trace.posBefore = posBefore;
 
     // 平仓放行：成交前有仓位且方向相反 → 用户是在平/减仓，不动它
-    if (guard.isReducingOrder(order, netPos, filledNow)) {
+    if (guard.isReducingOrder(order, netPos, filledNow, posMode)) {
       trace.result = 'pass-reduce';
       writeLog(trace);
       return {
@@ -147,13 +150,20 @@ async function reverseOrder({ instId, ordId, clOrdId, limits = guard.DEFAULT_LIM
     }
 
     // ── 5. 计算反向量 ───────────────────────
-    // 成交部分需要「先抵消再反开」= 2 倍；未成交部分只需反向下单 = 1 倍
+    const hedge = position.isHedge(posMode);
     const reverseSide = order.side === 'buy' ? 'sell' : 'buy';
     let reverseSz;
-    if (filled > 0) {
-      reverseSz = guard.scaleSz(String(filled), 2);
+    let reversePosSide = null;
+
+    if (hedge) {
+      // 双向持仓：多空分账。平掉成交部分 = 1 倍，再开反向 = 1 倍，
+      // 净效果与 net_mode 的 2 倍等价，但必须是两笔方向不同的单。
+      reverseSz = filled > 0 ? guard.scaleSz(String(filled), 1) : String(order.sz);
+      const rp = position.reverseParamsOf(order, posMode, reverseSz);
+      reversePosSide = rp.posSide;
     } else {
-      reverseSz = String(order.sz);
+      // 净持仓：成交部分要「先抵消再反开」= 2 倍；未成交部分只需反向下单 = 1 倍
+      reverseSz = filled > 0 ? guard.scaleSz(String(filled), 2) : String(order.sz);
     }
 
     const refPx =
@@ -180,13 +190,19 @@ async function reverseOrder({ instId, ordId, clOrdId, limits = guard.DEFAULT_LIM
 
     trace.reverseSide = reverseSide;
     trace.reverseSz = reverseSz;
+    trace.reversePosSide = reversePosSide;
     trace.filled = filled;
     trace.cancelled = cancelled;
 
-    log(
-      `→ 反向 ${reverseSide} ${reverseSz} 张` +
-        (filled > 0 ? `（成交 ${filled} 张 ×2）` : `（原单 ${order.sz} ×1）`)
-    );
+    const explain = hedge
+      ? filled > 0
+        ? `（成交 ${filled} 张：先平该方向，再开反向 ${reversePosSide}）`
+        : `（原单 ${order.sz} ×1，开反向 ${reversePosSide}）`
+      : filled > 0
+      ? `（成交 ${filled} 张 ×2）`
+      : `（原单 ${order.sz} ×1）`;
+
+    log(`→ 反向 ${reverseSide}${reversePosSide ? '/' + reversePosSide : ''} ${reverseSz} 张 ${explain}`);
 
     if (dryRun) {
       trace.result = 'dry-run';
@@ -203,11 +219,34 @@ async function reverseOrder({ instId, ordId, clOrdId, limits = guard.DEFAULT_LIM
 
     // ── 6. 下反向单 ─────────────────────────
     const newClOrdId = guard.newClOrdId();
+    const tdMode = order.tdMode || 'cross';
+
+    // 双向持仓且已成交：必须先把这笔成交平掉，否则会变成「多空双开」
+    if (hedge && filled > 0) {
+      const cp = position.closeParamsOf(order);
+      log(`  ① 平掉成交的 ${reverseSz} 张（${cp.side}/${cp.posSide} reduceOnly）`);
+      await placeOrder(
+        {
+          instId,
+          tdMode,
+          side: cp.side,
+          posSide: cp.posSide,
+          reduceOnly: true,
+          ordType: 'market',
+          sz: reverseSz,
+          clOrdId: guard.newClOrdId(),
+        },
+        opts
+      );
+      log(`  ② 反向开 ${reverseSide}/${reversePosSide} ${reverseSz} 张`);
+    }
+
     const placed = await placeOrder(
       {
         instId,
-        tdMode: order.tdMode || 'cross',
+        tdMode,
         side: reverseSide,
+        ...(reversePosSide ? { posSide: reversePosSide } : {}),
         ordType: 'market',
         sz: reverseSz,
         clOrdId: newClOrdId,
@@ -231,6 +270,7 @@ async function reverseOrder({ instId, ordId, clOrdId, limits = guard.DEFAULT_LIM
       ordId: placed.ordId,
       clOrdId: newClOrdId,
       side: reverseSide,
+      posSide: reversePosSide,
       sz: reverseSz,
       cancelled,
       filled,

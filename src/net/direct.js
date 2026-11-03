@@ -16,7 +16,8 @@
  * 这样新用户什么都不用配，打开就能连。
  */
 
-const dns = require('dns').promises;
+const dnsCb = require('dns');
+const dns = dnsCb.promises;
 const https = require('https');
 const tls = require('tls');
 const fs = require('fs');
@@ -25,8 +26,8 @@ const path = require('path');
 /** 用于「拿真实 IP」的引导域名：它们指向和 okx.com 相同的服务器，但没被污染 */
 const BOOTSTRAP_DOMAINS = ['okx.cab'];
 
-/** 兜底种子 IP：万一 okx.cab 哪天也被污染了，这几个还能用（会定期刷新） */
-const SEED_IPS = ['16.162.171.65', '43.198.253.66', '18.163.157.45'];
+/** 兜底种子 IP：okx.cab 完全解析不了时才用（2026-11 更新；OKX 迁服会让旧 IP 全废） */
+const SEED_IPS = ['57.182.120.155', '54.168.247.236', '35.74.15.189'];
 
 /** TLS 握手的 SNI —— 必须是没被阻断的名字 */
 const SNI = 'okx.cab';
@@ -74,11 +75,33 @@ function log(...args) {
   console.log(...args);
 }
 
+/**
+ * 解析引导域名。
+ *
+ * 用 dns.lookup（系统解析器）而不是 dns.resolve4（c-ares 自己发 DNS 包）：
+ * 有些网络会拒绝 c-ares 的直连查询（ECONNREFUSED），一旦解析失败，
+ * 程序就退化到写死的种子 IP —— 种子过期后整条通道就死了。踩过这个坑。
+ */
+function lookup4(host) {
+  return new Promise((resolve) => {
+    dnsCb.lookup(host, { all: true }, (e, addrs) => {
+      if (e || !addrs) return resolve([]);
+      resolve(addrs.filter((a) => a.family === 4).map((a) => a.address));
+    });
+  });
+}
+
 /** 从引导域名解析真实 IP（并发多个域名，合并去重） */
 async function resolveIps() {
   const found = new Set();
   await Promise.all(
     BOOTSTRAP_DOMAINS.map(async (d) => {
+      // 先走系统解析器
+      const viaLookup = await lookup4(d);
+      viaLookup.forEach((ip) => found.add(ip));
+      if (viaLookup.length) return;
+
+      // 再退到 c-ares
       try {
         const list = await dns.resolve4(d);
         list.forEach((ip) => found.add(ip));
